@@ -1,18 +1,20 @@
 import * as FileSystem from 'expo-file-system';
 import LZString from 'lz-string';
 import { getAllDates, getRecordsByDate, insertRecord } from './database';
+import { IMAGES_DIR, readImageAsBase64, writeImageFromBase64 } from './imageStorage';
 
-export const BACKUP_FILENAME  = 'attendance_backup_v2.lzb';   // compressed
-export const BACKUP_KEY_DATE  = 'attendance_backup_last_date'; // AsyncStorage key
+export const BACKUP_FILENAME      = 'attendance_backup_v2.lzb';
+export const BACKUP_FULL_FILENAME = 'attendance_backup_full_v1.lzb';
+export const BACKUP_KEY_DATE      = 'attendance_backup_last_date';
 export const INTERNAL_BACKUP_PATH = `${FileSystem.documentDirectory}${BACKUP_FILENAME}`;
 
 export interface BackupData {
   version: string;
   exportedAt: string;
   records: any[];
+  images?: Record<string, string>; // recordId → base64 (only in full backup)
 }
 
-// ── Collect all records from DB ──────────────────────────────────────────────
 function collectAllRecords(): any[] {
   const dates = getAllDates();
   const records: any[] = [];
@@ -20,7 +22,6 @@ function collectAllRecords(): any[] {
   return records;
 }
 
-// ── Compress JSON → Base64 string (lz-string) ────────────────────────────────
 function compress(data: BackupData): string {
   return LZString.compressToBase64(JSON.stringify(data));
 }
@@ -31,25 +32,20 @@ function decompress(raw: string): BackupData {
   return JSON.parse(json);
 }
 
-// ── Daily auto-backup (call on every app open) ───────────────────────────────
-// Returns true if backup was actually performed, false if already done today.
+// ── النسخة الاحتياطية اليومية التلقائية (بيانات فقط) ────────────────────────
 export async function runDailyBackupIfNeeded(storage: {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
 }): Promise<boolean> {
   try {
     const records = collectAllRecords();
-    if (records.length === 0) return false;              // nothing to back up
+    if (records.length === 0) return false;
 
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
     const lastDate = await storage.getItem(BACKUP_KEY_DATE);
-    if (lastDate === today) return false;                 // already backed up today
+    if (lastDate === today) return false;
 
-    const data: BackupData = {
-      version: '2.0',
-      exportedAt: new Date().toISOString(),
-      records,
-    };
+    const data: BackupData = { version: '2.0', exportedAt: new Date().toISOString(), records };
     const compressed = compress(data);
     await FileSystem.writeAsStringAsync(INTERNAL_BACKUP_PATH, compressed, {
       encoding: FileSystem.EncodingType.UTF8,
@@ -61,7 +57,7 @@ export async function runDailyBackupIfNeeded(storage: {
   }
 }
 
-// ── Get info about the internal backup ───────────────────────────────────────
+// ── معلومات النسخة الداخلية ───────────────────────────────────────────────────
 export async function getInternalBackupInfo(): Promise<{
   exists: boolean; date: string | null; count: number; sizeKB: number;
 }> {
@@ -71,7 +67,7 @@ export async function getInternalBackupInfo(): Promise<{
     const raw = await FileSystem.readAsStringAsync(INTERNAL_BACKUP_PATH, {
       encoding: FileSystem.EncodingType.UTF8,
     });
-    const sizeKB = Math.round((raw.length * 0.75) / 1024); // approx uncompressed KB
+    const sizeKB = Math.round((raw.length * 0.75) / 1024);
     const data = decompress(raw);
     return { exists: true, date: data.exportedAt, count: data.records?.length ?? 0, sizeKB };
   } catch {
@@ -79,7 +75,7 @@ export async function getInternalBackupInfo(): Promise<{
   }
 }
 
-// ── Export compressed backup to user-chosen folder (Downloads) via SAF ───────
+// ── تصدير نسخة بيانات فقط (بدون صور) ────────────────────────────────────────
 export async function exportBackupToDownloads(): Promise<'ok' | 'cancelled' | 'error'> {
   try {
     const records = collectAllRecords();
@@ -88,11 +84,7 @@ export async function exportBackupToDownloads(): Promise<'ok' | 'cancelled' | 'e
     const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
     if (!perm.granted) return 'cancelled';
 
-    const data: BackupData = {
-      version: '2.0',
-      exportedAt: new Date().toISOString(),
-      records,
-    };
+    const data: BackupData = { version: '2.0', exportedAt: new Date().toISOString(), records };
     const compressed = compress(data);
 
     const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
@@ -107,7 +99,52 @@ export async function exportBackupToDownloads(): Promise<'ok' | 'cancelled' | 'e
   }
 }
 
-// ── Import compressed backup from user-chosen folder via SAF ─────────────────
+// ── تصدير نسخة شاملة (بيانات + صور) ─────────────────────────────────────────
+export async function exportFullBackupToDownloads(
+  onProgress?: (done: number, total: number) => void
+): Promise<'ok' | 'cancelled' | 'error'> {
+  try {
+    const records = collectAllRecords();
+    if (records.length === 0) return 'error';
+
+    const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!perm.granted) return 'cancelled';
+
+    // جمع الصور كـ base64
+    const images: Record<string, string> = {};
+    const recordsWithImages = records.filter(r => r.imagePath);
+    const total = recordsWithImages.length;
+
+    for (let i = 0; i < recordsWithImages.length; i++) {
+      const record = recordsWithImages[i];
+      try {
+        const b64 = await readImageAsBase64(record.imagePath);
+        if (b64) images[record.id] = b64;
+      } catch {}
+      onProgress?.(i + 1, total);
+    }
+
+    const data: BackupData = {
+      version: '3.0',
+      exportedAt: new Date().toISOString(),
+      records,
+      images,
+    };
+    const compressed = compress(data);
+
+    const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+      perm.directoryUri, BACKUP_FULL_FILENAME, 'application/octet-stream'
+    );
+    await FileSystem.writeAsStringAsync(fileUri, compressed, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+    return 'ok';
+  } catch {
+    return 'error';
+  }
+}
+
+// ── استيراد نسخة من مجلد ─────────────────────────────────────────────────────
 export async function importBackupFromDownloads(): Promise<BackupData | null> {
   try {
     const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
@@ -118,8 +155,6 @@ export async function importBackupFromDownloads(): Promise<BackupData | null> {
     if (!found) return null;
 
     const raw = await FileSystem.readAsStringAsync(found, { encoding: FileSystem.EncodingType.UTF8 });
-
-    // Support both compressed (v2) and plain JSON (v1 fallback)
     try { return decompress(raw); } catch {}
     return JSON.parse(raw) as BackupData;
   } catch {
@@ -127,16 +162,28 @@ export async function importBackupFromDownloads(): Promise<BackupData | null> {
   }
 }
 
-// ── Restore records from backup data ─────────────────────────────────────────
+// ── استعادة السجلات (+ الصور إن وُجدت) ──────────────────────────────────────
 export async function restoreFromBackupData(
   data: BackupData
-): Promise<{ restored: number; skipped: number }> {
-  let restored = 0, skipped = 0;
+): Promise<{ restored: number; skipped: number; imagesRestored: number }> {
+  let restored = 0, skipped = 0, imagesRestored = 0;
+
   for (const record of data.records ?? []) {
     try { insertRecord(record); restored++; } catch { skipped++; }
   }
-  return { restored, skipped };
+
+  // استعادة الصور إن كانت موجودة في النسخة الشاملة
+  if (data.images) {
+    for (const [recordId, base64] of Object.entries(data.images)) {
+      try {
+        await writeImageFromBase64(recordId, base64);
+        imagesRestored++;
+      } catch {}
+    }
+  }
+
+  return { restored, skipped, imagesRestored };
 }
 
-// Legacy alias used by RestoreModal / _layout.tsx
+// Legacy alias
 export { importBackupFromDownloads as importBackupFromSAF };
