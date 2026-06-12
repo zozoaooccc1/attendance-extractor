@@ -2,7 +2,7 @@
   "expo": {
     "name": "تطبيق الحضور",
     "slug": "attendance",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "attendance",
@@ -35,7 +35,7 @@
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM"
       ],
-      "versionCode": 31
+      "versionCode": 32
     },
     "web": {
       "favicon": "./assets/images/icon.png"
