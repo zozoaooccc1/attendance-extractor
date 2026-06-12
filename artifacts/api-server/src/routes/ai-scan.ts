@@ -15,9 +15,8 @@ router.post("/ai-scan", async (req: Request, res: Response) => {
   const GEMINI_KEY = process.env["GEMINI_API_KEY"] ?? "";
 
   if (!GEMINI_KEY) {
-    // بدون مفتاح API — نُعيد خطأ واضحاً بدلاً من الانهيار
     res.status(503).json({
-      error: "GEMINI_API_KEY غير مُعيَّن في الخادم — يرجى تفعيل Gemini في الإعدادات",
+      error: "GEMINI_API_KEY غير مُعيَّن في الخادم — يرجى إضافة المفتاح في الإعدادات",
     });
     return;
   }
@@ -51,7 +50,7 @@ router.post("/ai-scan", async (req: Request, res: Response) => {
       },
     };
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
 
     const geminiRes = await fetch(endpoint, {
       method: "POST",
@@ -73,7 +72,6 @@ router.post("/ai-scan", async (req: Request, res: Response) => {
     const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     logger.info({ rawText }, "Gemini AI scan response");
 
-    // استخرج JSON من الرد
     const jsonMatch = rawText.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) {
       res.status(200).json({ time: null, error: "لم يُعيد Gemini نتيجة مفهومة" });
@@ -82,7 +80,6 @@ router.post("/ai-scan", async (req: Request, res: Response) => {
 
     const parsed = JSON.parse(jsonMatch[0]) as { time?: string | null; confidence?: number };
 
-    // تحقق من صحة صيغة الوقت HH:MM
     const timeStr = parsed.time ?? null;
     if (timeStr && !/^\d{1,2}:\d{2}$/.test(timeStr)) {
       res.status(200).json({ time: null, error: "صيغة الوقت غير صحيحة" });
