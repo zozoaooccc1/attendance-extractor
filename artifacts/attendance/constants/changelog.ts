@@ -7,6 +7,15 @@ export interface ChangelogItem {
 
 const changelog: ChangelogItem[] = [
   {
+    version: '2.9.1',
+    title: 'إصلاح عاجل — استقرار عند التشغيل',
+    date: '2026-06-12',
+    items: [
+      { type: 'fix', text: 'إصلاح كراش فوري عند فتح التطبيق كان ناتجاً عن تهيئة OneSignal قبل جاهزية النظام' },
+      { type: 'fix', text: 'إزالة تعارض expo-updates من إعدادات البناء' },
+    ],
+  },
+  {
     version: '2.9.0',
     title: 'بيانات الموظف + تحديثات مباشرة + إشعارات APK',
     date: '2026-06-12',
@@ -91,4 +100,4 @@ export function getLatestChangelog(): ChangelogItem | null {
   return changelog[0] ?? null;
 }
 
-export const CURRENT_VERSION = '2.9.0';
+export const CURRENT_VERSION = '2.9.1';
