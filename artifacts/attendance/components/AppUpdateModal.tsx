@@ -4,7 +4,7 @@ import {
   Linking, ScrollView, Platform, ActivityIndicator,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { Ionicons } from '@expo/vector-icons';
 import { moderateScale, clampFont } from '@/utils/responsive';
 import { AppUpdateInfo, snoozeUpdate } from '@/utils/easUpdateChecker';
@@ -34,7 +34,7 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
 
   const changelog: ChangelogItem | null = getVersionChangelog(info.version);
 
-  // ── تحميل + تثبيت APK مباشرة بدون GitHub ───────────────────────────────────
+  // ── تحميل + تثبيت APK مباشرة بدون قائمة مشاركة ─────────────────────────────
   const handleInstall = async () => {
     // Web: fallback to direct link
     if (Platform.OS === 'web') {
@@ -70,16 +70,16 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
 
       setPhase('ready');
 
-      // مشاركة APK — على Android يفتح نافذة التثبيت مباشرة
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(result.uri, {
-          mimeType: 'application/vnd.android.package-archive',
-          dialogTitle: `تثبيت الإصدار ${info.version}`,
-          UTI: 'com.apple.ipa',
+      if (Platform.OS === 'android') {
+        // تحويل file:// إلى content:// لـ Android ثم فتح نافذة التثبيت مباشرة
+        const contentUri = await FileSystem.getContentUriAsync(result.uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+          type: 'application/vnd.android.package-archive',
         });
       } else {
-        // احتياطي: افتح الرابط في المتصفح
+        // iOS: افتح الرابط في المتصفح
         await Linking.openURL(info.downloadUrl);
       }
 
