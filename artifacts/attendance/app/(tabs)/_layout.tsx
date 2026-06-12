@@ -176,6 +176,7 @@ function FloatingTabBar({ state, navigation, isDark, activeColor, inactiveColor,
 export default function TabLayout() {
   const colors = useColors();
   const { resolvedScheme } = useTheme();
+  const { defaultTab } = useSettings();
   const insets = useSafeAreaInsets();
   const isDark = resolvedScheme === 'dark';
 
@@ -185,6 +186,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      initialRouteName={defaultTab}
       tabBar={(props) => (
         <FloatingTabBar
           {...(props as unknown as FloatingTabBarProps)}
