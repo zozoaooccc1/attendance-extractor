@@ -4,6 +4,7 @@ import { Language, AppTranslations, translations, RTL_LANGUAGES } from '@/i18n/i
 
 export type TimeFormat = '12h' | '24h';
 export type FontScale = 'sm' | 'md' | 'lg';
+export type DefaultTab = 'employee' | 'index' | 'history' | 'calendar' | 'reports';
 export type { Language };
 
 interface SettingsContextType {
@@ -19,6 +20,8 @@ interface SettingsContextType {
   setLanguage: (l: Language) => void;
   t: AppTranslations;
   isRTL: boolean;
+  defaultTab: DefaultTab;
+  setDefaultTab: (tab: DefaultTab) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -30,6 +33,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [fontScale, setFS] = useState<FontScale>('md');
   const [earlyReminder, setER] = useState(false);
   const [language, setLang] = useState<Language>('ar');
+  const [defaultTab, setDT] = useState<DefaultTab>('index');
 
   useEffect(() => {
     AsyncStorage.multiGet([KEY, LANG_KEY]).then(pairs => {
@@ -41,6 +45,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           if (s.timeFormat) setTF(s.timeFormat);
           if (s.fontScale) setFS(s.fontScale);
           if (typeof s.earlyReminder === 'boolean') setER(s.earlyReminder);
+          if (s.defaultTab) setDT(s.defaultTab as DefaultTab);
         } catch {}
       }
       if (langStr === 'ar' || langStr === 'en') setLang(langStr);
@@ -61,6 +66,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setLang(l);
     AsyncStorage.setItem(LANG_KEY, l);
   }, []);
+  const setDefaultTab = useCallback((tab: DefaultTab) => { setDT(tab); persist({ defaultTab: tab }); }, [persist]);
 
   const t = translations[language];
 
@@ -83,6 +89,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       earlyReminder, setEarlyReminder,
       formatTime, fontMultiplier,
       language, setLanguage, t, isRTL,
+      defaultTab, setDefaultTab,
     }}>
       {children}
     </SettingsContext.Provider>
