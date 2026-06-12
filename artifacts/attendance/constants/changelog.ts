@@ -7,6 +7,16 @@ export interface ChangelogItem {
 
 const changelog: ChangelogItem[] = [
   {
+    version: '2.9.2',
+    title: 'إصلاح تجمّد شاشة البداية',
+    date: '2026-06-12',
+    items: [
+      { type: 'fix', text: 'إصلاح تجمّد التطبيق على أيقونة البداية — كان فشل أي عملية تهيئة يمنع إخفاء الشاشة' },
+      { type: 'fix', text: 'إضافة مؤقت أمان 5 ثوانٍ: التطبيق يفتح دائماً حتى لو فشلت إحدى خطوات التهيئة' },
+      { type: 'fix', text: 'حماية كاملة لخطوة فحص القفل بـ try/catch لمنع التجمّد عند خطأ AsyncStorage أو LocalAuthentication' },
+    ],
+  },
+  {
     version: '2.9.1',
     title: 'إصلاح عاجل — استقرار عند التشغيل',
     date: '2026-06-12',
@@ -100,4 +110,4 @@ export function getLatestChangelog(): ChangelogItem | null {
   return changelog[0] ?? null;
 }
 
-export const CURRENT_VERSION = '2.9.1';
+export const CURRENT_VERSION = '2.9.2';
