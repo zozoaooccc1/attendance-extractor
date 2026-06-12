@@ -37,7 +37,6 @@ import { initOneSignal } from "@/utils/oneSignalService";
 
 SplashScreen.preventAutoHideAsync();
 setupNotificationHandler();
-initOneSignal();
 const queryClient = new QueryClient();
 const BIOMETRIC_KEY = "attendance_biometric_lock";
 const AUTO_LOCK_MS = 2 * 60 * 1000;
@@ -234,6 +233,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
     (async () => {
+      // 0. OneSignal — داخل useEffect بعد تحميل React Native
+      if (Platform.OS !== 'web') {
+        try { initOneSignal(); } catch {}
+      }
+
       // 1. Crash guard
       if (Platform.OS !== 'web') {
         try {
