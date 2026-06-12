@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Platform, TextInput,
+  Platform, TextInput, ScrollView,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -13,7 +13,6 @@ import { useSettings } from '@/context/SettingsContext';
 import { AttendanceRecord, RecordType, RECORD_LABELS } from '@/constants/types';
 import { moderateScale, clampFont, spacing, buildFontSize } from '@/utils/responsive';
 import { checkLateEntry } from '@/constants/scheduleConfig';
-
 
 function parseDateStr(s: string) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
 function fmt(d: Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -30,6 +29,19 @@ function getWeekLabel(ws: string, months: string[]): string {
   return `${d.getDate()} ${months[d.getMonth()].slice(0,3)} — ${end.getDate()} ${months[end.getMonth()].slice(0,3)}`;
 }
 
+// هل اليوم فيه تأخير؟
+function dayHasLate(records: AttendanceRecord[], date: string): boolean {
+  const d = parseDateStr(date);
+  return records.some(r => {
+    if (r.type !== 'entry1' && r.type !== 'entry2') return false;
+    const { isLate } = checkLateEntry(r.type as 'entry1'|'entry2', r.confirmedTime, d, r.shiftType);
+    return isLate;
+  });
+}
+
+type FilterType = 'all' | 'late' | 'month' | 'friday';
+type SortOrder  = 'newest' | 'oldest';
+
 type Styles = ReturnType<typeof createStyles>;
 
 interface DayCardProps { date: string; records: AttendanceRecord[]; onPress: () => void; formatTime: (s:string)=>string; styles: Styles; }
@@ -41,7 +53,6 @@ function DayCard({ date, records, onPress, formatTime, styles }: DayCardProps) {
   const types: RecordType[] = records.some(r => r.shiftType === 'double')
     ? ['entry1','exit1','entry2','exit2'] : ['entry1','exit1'];
 
-  // ── كشف التأخر مع ملاحظة ────────────────────────────────────────────────
   const lateNotes = useMemo(() => {
     return records
       .filter(r => (r.type === 'entry1' || r.type === 'entry2') && r.note?.trim())
@@ -63,7 +74,6 @@ function DayCard({ date, records, onPress, formatTime, styles }: DayCardProps) {
         <Text style={[styles.dateMonth, { color: isFri ? '#d97706' : colors.primary, fontFamily: 'Inter_500Medium' }]}>
           {t.monthsShort[d.getMonth()].slice(0,3)}
         </Text>
-        {/* شارة ملاحظة التأخير */}
         {hasLateWithNote && (
           <View style={styles.lateNoteBadge}>
             <Text style={styles.lateNoteBadgeText}>📝</Text>
@@ -76,7 +86,6 @@ function DayCard({ date, records, onPress, formatTime, styles }: DayCardProps) {
             {t.days[d.getDay()]}
             {isFri && <Text style={[styles.fridayText, { color: '#d97706' }]}> ({t.history.friday})</Text>}
           </Text>
-          {/* مؤشر التأخر مع ملاحظة مُرجعة */}
           {hasLateWithNote && (
             <View style={styles.lateNoteChip}>
               <Text style={styles.lateNoteChipText}>⚠️ تأخر • ملاحظة مُرفقة</Text>
@@ -97,7 +106,6 @@ function DayCard({ date, records, onPress, formatTime, styles }: DayCardProps) {
                     <View style={[styles.dot, {
                       backgroundColor: rec.isManuallyEdited ? colors.primary : (rec.ocrConfidence ?? 0) >= 80 ? colors.success : colors.warning
                     }]} />
-                    {/* نقطة حمراء إذا متأخر مع ملاحظة */}
                     {(rec.type === 'entry1' || rec.type === 'entry2') && rec.note?.trim() && (() => {
                       const { isLate } = checkLateEntry(rec.type as 'entry1' | 'entry2', rec.confirmedTime, d, rec.shiftType);
                       return isLate;
@@ -124,19 +132,53 @@ export default function HistoryScreen() {
   const router = useRouter();
   const { allDates, getRecordForDate, refreshDates } = useAttendance();
   const { formatTime, fontMultiplier, t } = useSettings();
-  const [search, setSearch] = useState('');
-  const [grouped, setGrouped] = useState(false);
+  const [search,     setSearch]     = useState('');
+  const [grouped,    setGrouped]    = useState(false);
+  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [sortOrder,  setSortOrder]  = useState<SortOrder>('newest');
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
 
   useFocusEffect(useCallback(() => { refreshDates(); }, [refreshDates]));
 
+  const thisMonth = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }, []);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return allDates;
-    const q = search.trim().toLowerCase();
-    return allDates.filter(d => d.includes(q) || t.days[parseDateStr(d).getDay()].includes(q));
-  }, [allDates, search, t.days]);
+    let dates = [...allDates];
+
+    // البحث النصي: تاريخ + اسم يوم + ملاحظات السجلات
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      dates = dates.filter(d => {
+        if (d.includes(q)) return true;
+        if (t.days[parseDateStr(d).getDay()].includes(q)) return true;
+        // بحث في ملاحظات السجلات
+        const recs = getRecordForDate(d);
+        return recs.some(r => r.note?.toLowerCase().includes(q));
+      });
+    }
+
+    // الفلاتر
+    if (filterType === 'late') {
+      dates = dates.filter(d => {
+        const recs = getRecordForDate(d);
+        return dayHasLate(recs, d);
+      });
+    } else if (filterType === 'month') {
+      dates = dates.filter(d => d.startsWith(thisMonth));
+    } else if (filterType === 'friday') {
+      dates = dates.filter(d => parseDateStr(d).getDay() === 5);
+    }
+
+    // الترتيب
+    if (sortOrder === 'oldest') dates = dates.slice().reverse();
+
+    return dates;
+  }, [allDates, search, filterType, sortOrder, t.days, thisMonth]);
 
   const weeks = useMemo(() => {
     if (!grouped) return null;
@@ -146,11 +188,26 @@ export default function HistoryScreen() {
       if (!map.has(ws)) map.set(ws, []);
       map.get(ws)!.push(d);
     }
-    return Array.from(map.entries()).sort((a,b) => b[0].localeCompare(a[0]));
-  }, [filtered, grouped]);
+    return Array.from(map.entries()).sort((a,b) =>
+      sortOrder === 'oldest' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])
+    );
+  }, [filtered, grouped, sortOrder]);
+
+  // شارة عدد التأخيرات
+  const lateCount = useMemo(() => {
+    return allDates.filter(d => dayHasLate(getRecordForDate(d), d)).length;
+  }, [allDates]);
+
+  const filterOptions: { key: FilterType; label: string; icon: string; count?: number }[] = [
+    { key: 'all',    label: 'الكل',         icon: 'list-outline'         },
+    { key: 'late',   label: 'تأخيرات',      icon: 'alert-circle-outline', count: lateCount },
+    { key: 'month',  label: 'هذا الشهر',   icon: 'calendar-outline'     },
+    { key: 'friday', label: 'الجمعة فقط',  icon: 'sunny-outline'        },
+  ];
 
   const ListHeaderComponent = (
-    <View style={{ gap: moderateScale(10), paddingBottom: moderateScale(4) }}>
+    <View style={{ gap: moderateScale(8), paddingBottom: moderateScale(4) }}>
+      {/* شريط البحث */}
       <View style={[styles.searchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Ionicons name="search-outline" size={moderateScale(18)} color={colors.mutedForeground} />
         <TextInput
@@ -167,15 +224,53 @@ export default function HistoryScreen() {
           </TouchableOpacity>
         )}
       </View>
-      <TouchableOpacity
-        style={[styles.groupToggle, { backgroundColor: grouped ? colors.primary + '18' : colors.card, borderColor: grouped ? colors.primary : colors.border }]}
-        onPress={() => setGrouped(v => !v)}
-      >
-        <Ionicons name="calendar-outline" size={moderateScale(15)} color={grouped ? colors.primary : colors.mutedForeground} />
-        <Text style={[styles.groupToggleText, { color: grouped ? colors.primary : colors.mutedForeground, fontFamily: grouped ? 'Inter_600SemiBold' : 'Inter_400Regular' }]}>
-          {t.history.groupByWeek}
-        </Text>
-      </TouchableOpacity>
+
+      {/* شريط الفلاتر */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+        {filterOptions.map(opt => {
+          const active = filterType === opt.key;
+          return (
+            <TouchableOpacity key={opt.key}
+              style={[styles.filterChip,
+                { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primary + '18' : colors.card }]}
+              onPress={() => setFilterType(opt.key)}
+            >
+              <Ionicons name={opt.icon as any} size={moderateScale(13)} color={active ? colors.primary : colors.mutedForeground} />
+              <Text style={[styles.filterChipText, { color: active ? colors.primary : colors.mutedForeground, fontFamily: active ? 'Inter_600SemiBold' : 'Inter_400Regular' }]}>
+                {opt.label}
+              </Text>
+              {opt.count !== undefined && opt.count > 0 && (
+                <View style={[styles.filterBadge, { backgroundColor: active ? colors.primary : '#ef4444' }]}>
+                  <Text style={styles.filterBadgeText}>{opt.count}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* أدوات التجميع + الترتيب */}
+      <View style={{ flexDirection: 'row', gap: moderateScale(8) }}>
+        <TouchableOpacity
+          style={[styles.groupToggle, { flex: 1, backgroundColor: grouped ? colors.primary + '18' : colors.card, borderColor: grouped ? colors.primary : colors.border }]}
+          onPress={() => setGrouped(v => !v)}
+        >
+          <Ionicons name="calendar-outline" size={moderateScale(15)} color={grouped ? colors.primary : colors.mutedForeground} />
+          <Text style={[styles.groupToggleText, { color: grouped ? colors.primary : colors.mutedForeground, fontFamily: grouped ? 'Inter_600SemiBold' : 'Inter_400Regular' }]}>
+            {t.history.groupByWeek}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.groupToggle, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
+        >
+          <Ionicons name={sortOrder === 'newest' ? 'arrow-down-outline' : 'arrow-up-outline'} size={moderateScale(15)} color={colors.mutedForeground} />
+          <Text style={[styles.groupToggleText, { color: colors.mutedForeground }]}>
+            {sortOrder === 'newest' ? 'الأحدث' : 'الأقدم'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -210,7 +305,7 @@ export default function HistoryScreen() {
           <Animated.View entering={FadeIn.duration(400)} style={styles.empty}>
             <Ionicons name="search-outline" size={moderateScale(40)} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-              {search ? t.history.noResults : t.history.noRecords}
+              {search || filterType !== 'all' ? t.history.noResults : t.history.noRecords}
             </Text>
           </Animated.View>
         )}
@@ -252,6 +347,10 @@ function createStyles(mul: number) {
     list: { paddingHorizontal: spacing.lg, paddingTop: moderateScale(8), gap: moderateScale(8) },
     searchRow: { flexDirection: 'row', alignItems: 'center', borderRadius: moderateScale(12), borderWidth: 1, paddingHorizontal: moderateScale(12), paddingVertical: moderateScale(9), gap: moderateScale(9) },
     searchInput: { fontSize: fs.base, fontFamily: 'Inter_400Regular' },
+    filterChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: moderateScale(20), borderWidth: 1, paddingHorizontal: moderateScale(12), paddingVertical: moderateScale(7) },
+    filterChipText: { fontSize: fs.xs },
+    filterBadge: { borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 },
+    filterBadgeText: { color: '#fff', fontSize: 10, fontFamily: 'Inter_700Bold' },
     groupToggle: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8), borderRadius: moderateScale(10), borderWidth: 1, paddingHorizontal: moderateScale(12), paddingVertical: moderateScale(9) },
     groupToggleText: { fontSize: fs.sm },
     weekHeader: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(7), paddingVertical: moderateScale(8), borderBottomWidth: 1, marginBottom: moderateScale(4) },
