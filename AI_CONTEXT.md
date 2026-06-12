@@ -854,3 +854,88 @@ curl -X PUT -H "Authorization: token $GITHUB_TOKEN" \
   -d "{\"message\":\"...\",\"content\":\"$CONTENT\",\"sha\":\"<file_sha>\"}"
 ```
 
+---
+
+## 2026-06-12 — إصلاح تجمّد Splash Screen + فحص شامل (v2.9.2)
+
+### المشكلة التي تم حلها: تجمّد التطبيق على أيقونة البداية (v2.9.1)
+
+#### السبب الجذري:
+خطوة "فحص القفل" (step 2) في `useEffect` بـ `_layout.tsx` كانت **بدون try/catch**:
+```typescript
+// القديم — خطر!
+if (Platform.OS !== 'web') {
+  const bioEnabled = await AsyncStorage.getItem(BIOMETRIC_KEY); // ← قد تفشل
+  const pinEnabled = await isPINEnabled();  // ← قد تفشل
+  const hasBio = await LocalAuthentication.hasHardwareAsync();  // ← قد تفشل
+  const enrolled = await LocalAuthentication.isEnrolledAsync(); // ← قد تفشل
+}
+setLockChecked(true);
+SplashScreen.hideAsync(); // ← لن تُستدعى إذا فشل أي await أعلاه!
+```
+كذلك الـ IIFE الخارجي بدون `.catch()` — أي خطأ غير محجوب → splash يبقى للأبد.
+
+#### الحل المُطبَّق في `app/_layout.tsx`:
+1. **try/catch حول خطوة فحص القفل** — منع أي `await` من إيقاف التهيئة
+2. **`.catch()` على الـ IIFE الخارجي** — fallback يضمن إخفاء splash عند أي خطأ غير متوقع
+3. **مؤقت أمان 5 ثوانٍ** — `forceShowApp()` يُستدعى تلقائياً إذا لم تكتمل التهيئة
+```typescript
+// الجديد — آمن
+let splashHidden = false;
+const forceShowApp = () => {
+  if (splashHidden) return;
+  splashHidden = true;
+  setLockChecked(true);
+  SplashScreen.hideAsync().catch(() => {});
+};
+const safetyTimer = setTimeout(forceShowApp, 5000); // حد أقصى 5 ثوانٍ
+
+(async () => {
+  // ...
+  if (Platform.OS !== 'web') {
+    try { /* فحص القفل */ } catch {} // ← try/catch
+  }
+  setLockChecked(true);
+  clearTimeout(safetyTimer);
+  splashHidden = true;
+  SplashScreen.hideAsync().catch(() => {});
+})().catch(() => { forceShowApp(); }); // ← fallback
+```
+
+#### إصلاحات إضافية:
+- **`app.json`:** `splash.backgroundColor` من `#ffffff` (أبيض) إلى `#0f172a` (داكن) — لمنع الوميض الأبيض عند فتح التطبيق في الوضع الداكن
+
+### الملفات المُصلَحة (مرفوعة لـ GitHub):
+| الملف | التغيير |
+|---|---|
+| `app/_layout.tsx` | try/catch + safety timer + .catch() fallback |
+| `app.json` | version 2.9.2 + splash backgroundColor #0f172a |
+| `constants/changelog.ts` | CURRENT_VERSION = '2.9.2' + entry جديد |
+
+### EAS Build v2.9.2:
+- **Build ID:** `205f1ecc-0e81-4b97-a561-0d91cef904c4`
+- **URL:** https://expo.dev/accounts/amr9925487962/projects/attendance/builds/205f1ecc-0e81-4b97-a561-0d91cef904c4
+- **Profile:** preview (APK مباشر)
+- **Status:** submitted ✅ — يبني في سحابة Expo
+
+### قاعدة جديدة للـ AI:
+- **دائماً** لف خطوة "فحص القفل" في try/catch في `_layout.tsx`
+- **دائماً** أضف `.catch()` على الـ async IIFE في `useEffect` الرئيسي
+- **دائماً** أضف مؤقت أمان كـ fallback لـ `SplashScreen.hideAsync()`
+- **`splash.backgroundColor`** يجب أن يكون `#0f172a` (داكن) لمطابقة theme التطبيق
+
+### طريقة البناء من Replit (محدَّثة):
+```bash
+rm -rf /tmp/eas-build && git clone "https://$GITHUB_TOKEN@github.com/zozoaooccc1/attendance-extractor.git" /tmp/eas-build --depth=1
+cd /tmp/eas-build/artifacts/attendance
+# تثبيت الحزم الأساسية فقط لتشغيل EAS CLI
+npm install --legacy-peer-deps --no-optional --ignore-scripts \
+  "expo@54.0.27" "expo-router@6.0.17" "expo-font@14.0.10" \
+  "expo-web-browser@15.0.10" "onesignal-expo-plugin@2.7.0" \
+  "react@19.1.0" "react-native@0.81.5"
+# تشغيل البناء
+EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
+  ./node_modules/.bin/eas build \
+  --platform android --profile preview --non-interactive --no-wait
+```
+**ملاحظة:** لا تستخدم `npx eas-cli` بل استخدم `./node_modules/.bin/eas` من داخل المشروع.
