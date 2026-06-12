@@ -68,11 +68,10 @@ export default function EmployeeScreen() {
   const [deptInput, setDeptInput] = useState(department);
 
   // ── Calculate late/bonus minutes for current month ─────────────────────────
-  const { lateMinutes, bonusMinutes } = useMemo(() => {
+  const { lateMinutes } = useMemo(() => {
     const now = new Date();
     const records = getRecordForMonth(now.getFullYear(), now.getMonth() + 1);
     let late = 0;
-    let bonus = 0;
     for (const r of records) {
       if (r.type !== 'entry1' && r.type !== 'entry2') continue;
       const recordDate = new Date(r.createdAt);
@@ -81,9 +80,8 @@ export default function EmployeeScreen() {
       const actualMins = h * 60 + m;
       const diff = actualMins - scheduled;
       if (diff > 0) late += diff;
-      else if (diff < 0) bonus += Math.abs(diff);
     }
-    return { lateMinutes: late, bonusMinutes: bonus };
+    return { lateMinutes: late };
   }, [todayRecords, getRecordForMonth]);
 
   const handleShiftChange = (shift: ShiftType) => {
@@ -103,7 +101,6 @@ export default function EmployeeScreen() {
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const lateFmt = formatSmartDuration(lateMinutes);
-  const bonusFmt = formatSmartDuration(bonusMinutes);
 
   return (
     <ScrollView
@@ -295,50 +292,19 @@ export default function EmployeeScreen() {
       <Text style={[styles.groupLabel, { color: colors.mutedForeground, marginTop: moderateScale(14) }]}>
         إحصائيات الشهر الحالي
       </Text>
-      <View style={{ flexDirection: 'row', gap: moderateScale(10) }}>
-
-        {/* Late counter */}
-        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
-          <View style={[styles.rowIcon, { backgroundColor: '#ef444420', alignSelf: 'flex-start' }]}>
-            <Ionicons name="time-outline" size={moderateScale(18)} color="#ef4444" />
-          </View>
-          <Text style={[styles.rowSub, { color: colors.mutedForeground, marginTop: moderateScale(8) }]}>
-            دقائق التأخير
-          </Text>
-          <Text style={[styles.statValue, { color: '#ef4444', fontFamily: 'Inter_700Bold' }]}>
-            {lateFmt.value}
-          </Text>
-          <Text style={[styles.statUnit, { color: '#ef444499', fontFamily: 'Inter_500Medium' }]}>
-            {lateFmt.unit}
-          </Text>
+      {/* Late counter — full width */}
+      <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.rowIcon, { backgroundColor: '#ef444420', alignSelf: 'flex-start' }]}>
+          <Ionicons name="time-outline" size={moderateScale(18)} color="#ef4444" />
         </View>
-
-        {/* Bonus counter */}
-        <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
-          <View style={[styles.rowIcon, { backgroundColor: '#22c55e20', alignSelf: 'flex-start' }]}>
-            <Ionicons name="trending-up-outline" size={moderateScale(18)} color="#22c55e" />
-          </View>
-          <Text style={[styles.rowSub, { color: colors.mutedForeground, marginTop: moderateScale(8) }]}>
-            دقائق الزيادة
-          </Text>
-          <Text style={[styles.statValue, { color: '#22c55e', fontFamily: 'Inter_700Bold' }]}>
-            {bonusFmt.value}
-          </Text>
-          <Text style={[styles.statUnit, { color: '#22c55e99', fontFamily: 'Inter_500Medium' }]}>
-            {bonusFmt.unit}
-          </Text>
-        </View>
-
-      </View>
-
-      {/* ── Legend note ──────────────────────────────────────────────────── */}
-      <View style={[styles.noteRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Ionicons name="information-circle-outline" size={moderateScale(15)} color={colors.mutedForeground} />
-        <Text style={[styles.rowSub, { color: colors.mutedForeground, flex: 1, lineHeight: moderateScale(18) }]}>
-          <Text style={{ color: '#22c55e' }}>الزيادة</Text>
-          {' = الوصول قبل وقت الدوام  •  '}
-          <Text style={{ color: '#ef4444' }}>التأخير</Text>
-          {' = الوصول بعد وقت الدوام'}
+        <Text style={[styles.rowSub, { color: colors.mutedForeground, marginTop: moderateScale(8) }]}>
+          دقائق التأخير هذا الشهر
+        </Text>
+        <Text style={[styles.statValue, { color: '#ef4444', fontFamily: 'Inter_700Bold' }]}>
+          {lateFmt.value}
+        </Text>
+        <Text style={[styles.statUnit, { color: '#ef444499', fontFamily: 'Inter_500Medium' }]}>
+          {lateFmt.unit}
         </Text>
       </View>
 
