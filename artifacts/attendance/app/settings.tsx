@@ -14,7 +14,7 @@ import * as FileSystem from 'expo-file-system';
 import { exportBackupToDownloads, importBackupFromDownloads, restoreFromBackupData, getInternalBackupInfo } from '@/utils/backup';
 import { useColors } from '@/hooks/useColors';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
-import { useSettings, TimeFormat, FontScale } from '@/context/SettingsContext';
+import { useSettings, TimeFormat, FontScale, DefaultTab } from '@/context/SettingsContext';
 import { useAttendance } from '@/context/AttendanceContext';
 import { isPINEnabled, disablePIN } from '@/utils/pinAuth';
 import {
@@ -60,7 +60,7 @@ export default function SettingsScreen() {
   const router       = useRouter();
   const { preference, setPreference, resolvedScheme } = useTheme();
   const { timeFormat, setTimeFormat, fontScale, setFontScale, earlyReminder, setEarlyReminder,
-          fontMultiplier, language, setLanguage, t } = useSettings();
+          fontMultiplier, language, setLanguage, t, defaultTab, setDefaultTab } = useSettings();
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
   const { deleteOldRecords } = useAttendance();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -371,6 +371,41 @@ export default function SettingsScreen() {
           </View>
         )}
 
+      </View>
+
+
+      {/* ══════════════ GROUP: الصفحة الرئيسية ══════════════ */}
+      <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>
+        {language === 'ar' ? 'الصفحة الرئيسية' : 'Home Tab'}
+      </Text>
+      <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.rowExpand, { borderTopWidth: 0, paddingTop: moderateScale(12) }]}>
+          <Text style={[styles.rowSub, { color: colors.mutedForeground, marginBottom: moderateScale(6) }]}>
+            {language === 'ar' ? 'اختر الصفحة التي تظهر عند فتح التطبيق' : 'Choose which tab opens on launch'}
+          </Text>
+          <View style={styles.chipRow}>
+            {([
+              { key: 'employee', labelAr: 'الموظف',  icon: 'person-outline'        },
+              { key: 'index',    labelAr: 'اليوم',   icon: 'home-outline'          },
+              { key: 'history',  labelAr: 'السجل',   icon: 'list-outline'          },
+              { key: 'calendar', labelAr: 'التقويم', icon: 'calendar-outline'      },
+              { key: 'reports',  labelAr: 'التقارير',icon: 'document-text-outline' },
+            ] as { key: DefaultTab; labelAr: string; icon: string }[]).map(opt => (
+              <TouchableOpacity key={opt.key}
+                style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.muted },
+                  defaultTab === opt.key && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                onPress={() => setDefaultTab(opt.key)}
+              >
+                <Ionicons name={opt.icon as any} size={moderateScale(14)}
+                  color={defaultTab === opt.key ? colors.primaryForeground : colors.mutedForeground} />
+                <Text style={[styles.chipText, { color: defaultTab === opt.key ? colors.primaryForeground : colors.mutedForeground },
+                  defaultTab === opt.key && { fontFamily: 'Inter_700Bold' }]}>
+                  {opt.labelAr}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </View>
 
       {/* ══════════════ GROUP: التنبيهات ══════════════ */}
