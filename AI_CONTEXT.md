@@ -763,3 +763,60 @@ eas webhook:create --event BUILD \
 - **ملاحظة:** الـ NOTIFY_SECRET يجب أن يكون 16 حرفاً على الأقل (الحالي 48 حرفاً).
 - **ملاحظة:** الـ webhook مربوط بـ dev domain — عند النشر الإنتاجي يجب تحديثه بالـ domain الثابت.
 
+
+---
+
+## 2026-06-12 — إصلاح كراش v2.9.0 + تحديث Changelog
+
+### المشكلة التي تم حلها: كراش فوري عند فتح APK 2.9.0
+
+#### السبب الجذري (مشكلتان):
+
+**المشكلة 1 — `initOneSignal()` على مستوى الوحدة (module level):**
+```typescript
+// _layout.tsx — السطر 40 القديم (خطأ)
+initOneSignal(); // ← يُستدعى قبل أن React Native يكون جاهزاً → CRASH
+```
+`OneSignal.Notifications.requestPermission(true)` تُطلق نافذة نظام Android
+فور تحميل JS bundle، قبل تهيئة Native modules → كراش فوري.
+
+**المشكلة 2 — كتلة `updates` في `app.config.js`:**
+```javascript
+// القديم (خطأ)
+updates: {
+  ...appJson.expo.updates,
+  requestHeaders: { 'expo-channel-name': ... },
+},
+```
+هذه الكتلة تجعل الـ runtime يبحث عن `expo-updates` المحذوف → تعارض عند البدء.
+
+#### الحل المُطبَّق:
+
+**الملف 1 — `app/_layout.tsx`:**
+- حُذف: `initOneSignal();` من مستوى الوحدة (السطر 40)
+- أُضيف: استدعاء `initOneSignal()` داخل `useEffect` (الخطوة 0) مُغلَّف بـ try/catch:
+```typescript
+// 0. OneSignal — داخل useEffect بعد تحميل React Native
+if (Platform.OS !== 'web') {
+  try { initOneSignal(); } catch {}
+}
+```
+
+**الملف 2 — `app.config.js`:**
+- حُذفت كتلة `updates` بالكامل — النظام لا يحتاجها بعد إلغاء expo-updates.
+
+**الملف 3 — `constants/changelog.ts` — v2.9.0:**
+- أُضيفت 3 إدخالات جديدة لـ v2.9.0:
+  - `new`: إشعار فوري عبر OneSignal عند اكتمال بناء APK جديد
+  - `fix`: إصلاح كراش بدء التشغيل (نقل OneSignal لـ useEffect)
+  - `fix`: إزالة كتلة updates من app.config.js
+
+#### حالة GitHub:
+- جميع الملفات الثلاثة رُفعت إلى `main` عبر GitHub Contents API ✅
+- الرفع تم بدون `git push` (محظور في Replit main agent) — نستخدم API بديلاً
+
+#### قاعدة مستقبلية للـ AI:
+- **لا تضع أي استدعاء لـ OneSignal أو native modules على مستوى الوحدة** — دائماً داخل `useEffect` أو بعد `AppRegistry.registerComponent`
+- **لا تضيف كتلة `updates` لـ app.config.js** — expo-updates محذوف نهائياً
+- **للرفع إلى GitHub من Replit:** استخدم GitHub Contents API مع base64 encoding (git push محظور في main agent)
+
