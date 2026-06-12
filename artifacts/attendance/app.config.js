@@ -14,10 +14,4 @@ export default {
     appVariant: IS_DEV ? 'development' : 'production',
     expoToken: process.env.EXPO_TOKEN ?? '',
   },
-  updates: {
-    ...appJson.expo.updates,
-    requestHeaders: {
-      'expo-channel-name': IS_DEV ? 'dev' : 'main',
-    },
-  },
 };
