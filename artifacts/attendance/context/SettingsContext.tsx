@@ -28,6 +28,9 @@ interface SettingsContextType {
   isRTL: boolean;
   defaultTab: DefaultTab;
   setDefaultTab: (tab: DefaultTab) => void;
+  maxStorageMB: number;
+  setMaxStorageMB: (mb: number) => void;
+  settingsLoaded: boolean;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -49,6 +52,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [alarmBeforeShift, setABS] = useState(false);
   const [language,         setLang] = useState<Language>('ar');
   const [defaultTab,       setDT]  = useState<DefaultTab>('index');
+  const [maxStorageMB,     setMSMB] = useState<number>(1000);
+  const [settingsLoaded,   setSL]  = useState(false);
 
   useEffect(() => {
     AsyncStorage.multiGet([KEY, LANG_KEY]).then(pairs => {
@@ -68,9 +73,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           if (typeof s.earlyReminder    === 'boolean') setER(s.earlyReminder);
           if (typeof s.alarmBeforeShift === 'boolean') setABS(s.alarmBeforeShift);
           if (s.defaultTab) setDT(s.defaultTab as DefaultTab);
+          if (typeof s.maxStorageMB     === 'number')  setMSMB(s.maxStorageMB);
         } catch {}
       }
       if (langStr === 'ar' || langStr === 'en') setLang(langStr);
+      setSL(true);
     });
   }, []);
 
@@ -88,7 +95,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     persist({ fontScale: s, fontSizePercent: pct });
   }, [persist]);
   const setFontSizePercent = useCallback((v: number) => {
-    const clamped = Math.max(80, Math.min(150, Math.round(v / 5) * 5));
+    const clamped = Math.max(80, Math.min(150, Math.round(v)));
     setFSP(clamped);
     persist({ fontSizePercent: clamped });
   }, [persist]);
@@ -98,6 +105,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setAlarmBeforeShift = useCallback((v: boolean) => { setABS(v);  persist({ alarmBeforeShift: v }); }, [persist]);
   const setLanguage         = useCallback((l: Language) => { setLang(l); AsyncStorage.setItem(LANG_KEY, l); }, []);
   const setDefaultTab       = useCallback((tab: DefaultTab) => { setDT(tab); persist({ defaultTab: tab }); }, [persist]);
+  const setMaxStorageMB     = useCallback((mb: number) => { setMSMB(mb); persist({ maxStorageMB: mb }); }, [persist]);
 
   const t = translations[language];
 
@@ -124,6 +132,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       formatTime, fontMultiplier,
       language, setLanguage, t, isRTL,
       defaultTab, setDefaultTab,
+      maxStorageMB, setMaxStorageMB,
+      settingsLoaded,
     }}>
       {children}
     </SettingsContext.Provider>
