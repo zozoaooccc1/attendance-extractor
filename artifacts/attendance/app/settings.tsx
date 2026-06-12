@@ -25,7 +25,7 @@ import {
   requestNotificationPermissions,
   scheduleSingleShiftReminders,
   scheduleDoubleShiftReminders,
-  schedulePersistentReminders,
+  scheduleAlarmBurst,
   cancelAllAttendanceReminders,
   sendImmediateAlert,
 } from '@/utils/notifications';
@@ -126,6 +126,7 @@ export default function SettingsScreen() {
     fontSizePercent, setFontSizePercent,
     highContrast, setHighContrast,
     earlyReminder, setEarlyReminder,
+    alarmBeforeShift, setAlarmBeforeShift,
     fontMultiplier, language, setLanguage, t, defaultTab, setDefaultTab,
   } = useSettings();
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
@@ -134,7 +135,6 @@ export default function SettingsScreen() {
 
   const [notifEnabled,        setNotifEnabled]        = useState(false);
   const [notifShift,          setNotifShift]           = useState<ShiftType>('single');
-  const [persistentReminder,  setPersistentReminder]   = useState(false);
   const [saving,              setSaving]               = useState(false);
   const [testingSend,         setTestingSend]          = useState(false);
   const [biometricEnabled,    setBiometricEnabled]     = useState(false);
@@ -157,7 +157,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(NOTIF_KEY).then(v => {
-      if (v) { try { const s = JSON.parse(v); setNotifEnabled(s.enabled ?? false); setNotifShift(s.shift ?? 'single'); if (typeof s.persistent === 'boolean') setPersistentReminder(s.persistent); } catch {} }
+      if (v) { try { const s = JSON.parse(v); setNotifEnabled(s.enabled ?? false); setNotifShift(s.shift ?? 'single'); } catch {} }
     });
     AsyncStorage.getItem(BIOMETRIC_KEY).then(v => setBiometricEnabled(v === '1'));
     AsyncStorage.getItem(AUTO_DELETE_KEY).then(v => { if (v) setAutoDeleteMonths(Number(v)); });
@@ -343,15 +343,18 @@ export default function SettingsScreen() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify({ enabled: notifEnabled, shift: notifShift, persistent: persistentReminder }));
+      await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify({ enabled: notifEnabled, shift: notifShift }));
       if (notifEnabled) {
-        if (notifShift === 'single') await scheduleSingleShiftReminders(earlyReminder ? 5 : 0);
-        else await scheduleDoubleShiftReminders(earlyReminder ? 5 : 0);
-        if (persistentReminder) await schedulePersistentReminders();
-        const msg = persistentReminder
-          ? 'التنبيه المستمر مفعّل — إشعارات متكررة قبل بصمة الدخول'
-          : earlyReminder ? t.settings.notify5minEarly : 'التنبيهات عند موعد البصمة';
-        Alert.alert('تم حفظ الإعدادات', msg, [{ text: 'حسناً' }]);
+        if (alarmBeforeShift) {
+          // المنبّه الصاخب: إشعار كل 5 ثوانٍ قبل 15 دقيقة من الدوام
+          await scheduleAlarmBurst(notifShift);
+          Alert.alert('تم حفظ الإعدادات ✅', 'المنبّه الصاخب مفعّل — سيتكرر الإشعار كل 5 ثوانٍ قبل 15 دقيقة من الدوام', [{ text: 'حسناً' }]);
+        } else {
+          if (notifShift === 'single') await scheduleSingleShiftReminders(earlyReminder ? 5 : 0);
+          else await scheduleDoubleShiftReminders(earlyReminder ? 5 : 0);
+          const msg = earlyReminder ? t.settings.notify5minEarly : 'التنبيهات عند موعد البصمة';
+          Alert.alert('تم حفظ الإعدادات', msg, [{ text: 'حسناً' }]);
+        }
       } else {
         await cancelAllAttendanceReminders();
         Alert.alert('تم', 'تم إيقاف التنبيهات');
@@ -579,36 +582,41 @@ export default function SettingsScreen() {
                 thumbColor={earlyReminder ? colors.primaryForeground : colors.mutedForeground} />
             </View>
             <RowSep colors={colors} />
+            {/* ── المنبّه الصاخب ─────────────────────────────────────────── */}
             <View style={styles.settingsRow}>
               <View style={[styles.rowIcon, { backgroundColor: '#ef444420' }]}>
-                <Ionicons name="notifications-circle-outline" size={moderateScale(18)} color="#ef4444" />
+                <Ionicons name="alarm-outline" size={moderateScale(18)} color="#ef4444" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.rowTitle, { color: colors.foreground }]}>{t.settings.persistentReminder}</Text>
-                <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{t.settings.persistentReminderSub}</Text>
+                <Text style={[styles.rowTitle, { color: colors.foreground }]}>المنبّه الصاخب</Text>
+                <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
+                  إشعار كل 5 ثوانٍ — 15 دقيقة قبل الدوام
+                </Text>
               </View>
-              <Switch value={persistentReminder} onValueChange={setPersistentReminder}
+              <Switch value={alarmBeforeShift} onValueChange={setAlarmBeforeShift}
                 trackColor={{ false: colors.muted, true: '#ef4444' }}
-                thumbColor={persistentReminder ? '#fff' : colors.mutedForeground} />
+                thumbColor={alarmBeforeShift ? '#fff' : colors.mutedForeground} />
             </View>
-            <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
-              <View style={[styles.chipRow, { marginBottom: moderateScale(4) }]}>
-                <View style={[styles.chip, { backgroundColor: '#ef444415', borderColor: '#ef444440', flex: 1, justifyContent: 'center' }]}>
-                  <Ionicons name="notifications-circle-outline" size={moderateScale(14)} color="#ef4444" />
-                  <Text style={[styles.chipText, { color: '#ef4444', fontFamily: 'Inter_600SemiBold' }]}>
-                    يطبّق على جميع بصمات الدخول (شفت + شفتين)
-                  </Text>
-                </View>
+            {alarmBeforeShift && (
+              <View style={[{ backgroundColor: '#ef444410', marginHorizontal: moderateScale(14), marginBottom: moderateScale(10), borderRadius: moderateScale(10), padding: moderateScale(10), flexDirection: 'row', alignItems: 'flex-start', gap: moderateScale(8) }]}>
+                <Ionicons name="warning-outline" size={moderateScale(16)} color="#ef4444" style={{ marginTop: 1 }} />
+                <Text style={[styles.rowSub, { color: '#ef4444', flex: 1, lineHeight: moderateScale(18) }]}>
+                  سيُرسل إشعار صاخب كل 5 ثوانٍ طوال 15 دقيقة قبل موعد الدخول.{'\n'}
+                  لا يمكن إيقافه إلا من هذه الإعدادات.
+                </Text>
               </View>
+            )}
+            <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
               <View style={[styles.scheduleBox, { borderColor: colors.border }]}>
-                {[
-                  { time: '8:45 — 9:00 ص', label: 'قبل بصمة الشفت الأول',   icon: 'notifications-outline' as const },
-                  { time: '11:45 — 12:00 م', label: 'قبل بصمة الشفت الواحد', icon: 'notifications-outline' as const },
-                  { time: '3:45 — 4:00 م',  label: 'قبل بصمة الشفت الثاني',  icon: 'notifications-outline' as const },
-                ].map((s, i, arr) => (
+                {(notifShift === 'single' ? [
+                  { time: '11:45 — 12:00 م', label: 'قبل بصمة الدخول (شفت واحد)', icon: 'alarm-outline' as const },
+                ] : [
+                  { time: '8:45 — 9:00 ص',  label: 'قبل بصمة الشفت الأول',  icon: 'alarm-outline' as const },
+                  { time: '3:45 — 4:00 م',   label: 'قبل بصمة الشفت الثاني', icon: 'alarm-outline' as const },
+                ]).map((s, i, arr) => (
                   <View key={i} style={[styles.schedItem, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-                    <View style={[styles.schedIcon, { backgroundColor: '#ef444415' }]}>
-                      <Ionicons name={s.icon} size={moderateScale(14)} color="#ef4444" />
+                    <View style={[styles.schedIcon, { backgroundColor: alarmBeforeShift ? '#ef444415' : colors.muted + '30' }]}>
+                      <Ionicons name={s.icon} size={moderateScale(14)} color={alarmBeforeShift ? '#ef4444' : colors.mutedForeground} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.schedTime, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{s.time}</Text>
