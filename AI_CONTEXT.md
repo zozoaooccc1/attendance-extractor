@@ -712,3 +712,50 @@ import { initOneSignal } from "@/utils/oneSignalService";
 ### ملاحظة EAS:
 ظهر تحذير `"expo-updates" package hasn't been installed` — هذا متوقع ومقصود لأننا حذفنا OTA. التحذير لا يؤثر على البناء.
 
+---
+
+## 2026-06-12 — نظام إشعارات OneSignal (Webhook + Manual Send)
+
+### ما تم بناؤه:
+ملف جديد: `artifacts/api-server/src/routes/notify.ts`
+
+**Endpoint 1 — EAS Webhook (تلقائي عند اكتمال البناء):**
+```
+POST /api/notify/eas-webhook
+Header: x-notify-secret: <NOTIFY_SECRET>
+```
+يستقبل إشعار Expo عند اكتمال بناء Android ويرسل push notification لجميع المستخدمين.
+
+**Endpoint 2 — Manual Send (يدوي):**
+```
+POST /api/notify/send
+Header: x-notify-secret: <NOTIFY_SECRET>
+Body: { "title": "...", "body": "...", "url": "..." }
+```
+لإرسال إشعار مخصص في أي وقت.
+
+### Secrets المطلوبة (محفوظة في Replit):
+- `ONESIGNAL_APP_ID` = `4b67803a-e800-4f83-974b-32615789ed23`
+- `ONESIGNAL_REST_API_KEY` = مفتاح OneSignal REST API v2
+- `NOTIFY_SECRET` = كلمة سر تحمي الـ endpoints
+
+### مشكلة واجهناها:
+الـ Secrets كانت محفوظة بعلامات اقتباس زائدة `"..."` مما يفسد UUID. الحل في الكود:
+```typescript
+.trim().replace(/^["']|["']$/g, "")
+```
+
+### اختبار ناجح:
+```bash
+curl -X POST /api/notify/send \
+  -H "x-notify-secret: $NOTIFY_SECRET" \
+  -d '{"title":"🚀 تحديث جديد","body":"..."}'
+# Response: {"ok":true}
+```
+
+### إعداد Webhook في Expo:
+لربط EAS Build تلقائياً، أضف في لوحة Expo:
+- URL: `https://<domain>/api/notify/eas-webhook`
+- Header: `x-notify-secret: <NOTIFY_SECRET>`
+- Event: `build.finished`
+
