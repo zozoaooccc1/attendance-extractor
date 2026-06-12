@@ -45,7 +45,7 @@ function formatArabicDate(isoStr: string): string {
   }
 }
 
-export async function checkForAppUpdate(): Promise<AppUpdateInfo | null> {
+export async function checkForAppUpdate(force = false): Promise<AppUpdateInfo | null> {
   try {
     const currentVersion = Constants.expoConfig?.version ?? '0.0.0';
     const token: string  = (Constants.expoConfig?.extra?.expoToken as string) ?? '';
@@ -101,9 +101,11 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo | null> {
     if (!build.appVersion || !downloadUrl) return null;
     if (!isNewer(build.appVersion, currentVersion)) return null;
 
-    // هل المستخدم أجّل هذا الإصدار؟
-    const snoozed = await AsyncStorage.getItem(SNOOZE_KEY + build.appVersion);
-    if (snoozed) return null;
+    // هل المستخدم أجّل هذا الإصدار؟ (يُتجاهل عند الفحص اليدوي)
+    if (!force) {
+      const snoozed = await AsyncStorage.getItem(SNOOZE_KEY + build.appVersion);
+      if (snoozed) return null;
+    }
 
     const dateStr = build.createdAt ? formatArabicDate(build.createdAt) : '';
     const notes   = dateStr ? `صدر بتاريخ ${dateStr}` : 'إصدار جديد متاح';
