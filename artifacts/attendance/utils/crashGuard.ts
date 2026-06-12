@@ -4,11 +4,14 @@
  * Crash-recovery system for the app.
  *
  * How it works:
- *   1. On every startup, writes a "startup_started" timestamp.
- *   2. After 10 seconds of stable running, writes "startup_completed".
- *   3. On next startup: if "started" exists but "completed" doesn't match →
+ *   1. On every startup, writes a 'startup_started' marker.
+ *   2. After 10 seconds of stable running, writes the SAME marker to 'startup_completed'.
+ *   3. On next startup: if 'started' exists but 'completed' != 'started' →
  *      the app crashed last time. Increments the crash counter.
  *   4. After 3 crashes of the same version → warn the user.
+ *
+ * Fix (v3.1.3): onAppStable() now writes KEY_COMPLETED = KEY_STARTED (same value),
+ * not a new timestamp — so they match on the next launch and no false crash is detected.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -73,6 +76,7 @@ export async function onAppStarting(): Promise<StartupResult> {
         if (!bad.includes(updateId)) { bad.push(updateId); await setBadIds(bad); }
       }
     }
+    // Write new session marker AFTER checking old one
     await AsyncStorage.setItem(KEY_STARTED, now);
   } catch {}
 
@@ -83,10 +87,12 @@ export async function onAppStarting(): Promise<StartupResult> {
 export async function onAppStable(): Promise<void> {
   if (Platform.OS === 'web') return;
   const updateId = getAppVersion();
-  const now      = String(Date.now());
   try {
+    // IMPORTANT: write KEY_COMPLETED = the SAME value as KEY_STARTED (not a new timestamp).
+    // This ensures started === completed on the next launch → no false crash detected.
+    const started = await AsyncStorage.getItem(KEY_STARTED);
     await AsyncStorage.multiSet([
-      [KEY_COMPLETED,   now],
+      [KEY_COMPLETED,   started ?? String(Date.now())],
       [KEY_CRASH_COUNT, '0'],
       [KEY_CRASH_FOR,   updateId],
     ]);
@@ -103,4 +109,9 @@ export async function clearCurrentUpdateBadFlag(): Promise<void> {
   const bad      = await getBadIds();
   await setBadIds(bad.filter(id => id !== updateId));
   await AsyncStorage.setItem(KEY_CRASH_COUNT, '0');
+  // Also reset completed to match started so next launch is clean
+  try {
+    const started = await AsyncStorage.getItem(KEY_STARTED);
+    if (started) await AsyncStorage.setItem(KEY_COMPLETED, started);
+  } catch {}
 }
