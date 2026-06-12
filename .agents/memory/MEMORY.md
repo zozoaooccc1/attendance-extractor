@@ -1,0 +1,1 @@
+- [قواعد مشروع Attendance](attendance-rules.md) — GitHub sync إلزامي + AI_CONTEXT.md append-only بعد كل جلسة

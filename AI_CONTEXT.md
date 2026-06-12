@@ -1,0 +1,686 @@
+# AI_CONTEXT.md — سياق الذكاء الاصطناعي لمشروع Attendance Extractor
+
+> **هذا الملف مخصص لأي AI يعمل على هذا المشروع.**
+> اقرأه كاملاً أول ما تفتح الجلسة لتعرف بالضبط أين وصل المشروع.
+
+---
+
+## ما هو هذا التطبيق؟
+
+تطبيق موبايل للموظفين لتسجيل حضورهم عبر التصوير بالكاميرا.
+- يلتقط صورة لجهاز البصمة ويحفظ الوقت الرسمي المزامَن تلقائياً
+- يدعم نظام شفت واحد وشفتين
+- يرسل تنبيهات قبل كل موعد دخول/خروج
+- يحتفظ بسجل كامل مع الصور والتواريخ والتقارير
+- يدعم إضافة **ملاحظة اختيارية** على كل سجل (حتى 200 حرف)
+
+---
+
+## Stack التقني
+
+| المكوّن | التفاصيل |
+|---|---|
+| Framework | Expo SDK 54 + React Native 0.81.5 |
+| Router | expo-router v6 |
+| DB | expo-sqlite v15 (runSync API) |
+| Updates | ❌ **OTA محذوف نهائياً** — نظام APK عبر GitHub Releases |
+| Notifications | expo-notifications |
+| Storage | AsyncStorage + expo-file-system |
+| Build | EAS Build (pnpm workspace monorepo) |
+| Language | TypeScript strict |
+| Repo structure | pnpm monorepo — التطبيق في `artifacts/attendance/` |
+
+---
+
+## نظام التحديث الجديد (APK بدلاً من OTA)
+
+### لماذا تم الإلغاء؟
+نظام OTA كان يسبب كراش عند التعارض بين JS bundle الجديد وAPK القديم.
+
+### كيف يعمل النظام الجديد؟
+1. التطبيق يفحص `https://raw.githubusercontent.com/zozoaooccc1/attendance-releases/main/version.json` عند كل فتح
+2. إذا كان الإصدار الموجود أحدث → يعرض modal يحتوي: رقم الإصدار + الميزات + زر "تحميل"
+3. المستخدم يضغط "تحميل" → يفتح المتصفح برابط APK
+4. يثبّت APK الجديد فوق القديم — البيانات تبقى 100%
+
+### ملف الإصدار (زوز يحدّثه عند كل إصدار جديد):
+- **Repo:** `https://github.com/zozoaooccc1/attendance-releases` (PUBLIC)
+- **الملف:** `version.json`
+- **التنسيق:**
+```json
+{
+  "version": "2.7.0",
+  "notes": "✨ ميزة جديدة\n🔧 إصلاح",
+  "download_url": "رابط APK المباشر"
+}
+```
+- عند رفع APK جديد: حدّث هذا الملف بالإصدار ورابط التنزيل
+
+### الملفات الجديدة:
+- `utils/githubUpdateChecker.ts` — منطق الفحص والمقارنة
+- `components/AppUpdateModal.tsx` — واجهة إشعار التحديث
+
+---
+
+## خريطة الملفات المهمة
+
+```
+artifacts/attendance/
+├── app.json                              <- version: "2.7.0" (بدون runtimeVersion/updates)
+├── eas.json                              <- development/preview/production profiles
+├── app/
+│   ├── _layout.tsx                       <- ROOT LAYOUT (OTA محذوف، GitHub update check)
+│   ├── (tabs)/index.tsx                  <- الشاشة الرئيسية
+│   ├── (tabs)/history.tsx                <- السجل — شارة 📝 للتأخر مع ملاحظة
+│   ├── (tabs)/calendar.tsx               <- التقويم الشهري
+│   ├── (tabs)/reports.tsx                <- التقارير — ملاحظات التأخير في PDF+واتساب+CSV
+│   ├── capture.tsx                       <- حقل ملاحظة اختياري (200 حرف)
+│   ├── settings.tsx                      <- ⚠️ يحتاج مراجعة: قد يرجع لـ expo-updates
+│   ├── record-detail.tsx
+│   └── day-detail.tsx
+├── utils/
+│   ├── githubUpdateChecker.ts            <- [جديد] فحص الإصدار من GitHub Releases
+│   ├── crashGuard.ts                     <- [محدَّث] بدون expo-updates — يستخدم Constants
+│   ├── notifications.native.ts
+│   ├── imageStorage.native.ts
+│   ├── database.native.ts
+│   ├── backup.native.ts
+│   ├── timeService.ts
+│   └── pinAuth.ts
+├── constants/
+│   ├── changelog.ts                      <- CURRENT_VERSION = '2.7.0'
+│   ├── scheduleConfig.ts                 <- checkLateEntry() — مواعيد الدوام
+│   └── types.ts                          <- AttendanceRecord — note?: string
+├── context/
+│   ├── AttendanceContext.tsx
+│   ├── SettingsContext.tsx
+│   └── ThemeContext.tsx
+└── components/
+    ├── AppUpdateModal.tsx                <- [جديد] modal إشعار التحديث
+    ├── ChangelogModal.tsx
+    ├── RestoreModal.tsx
+    └── ErrorBoundary.tsx
+```
+
+---
+
+## إصدارات النسخ
+
+| Version | الميزات الرئيسية | الحالة |
+|---|---|---|
+| **2.7.0** | إلغاء OTA + نظام APK update + ملاحظات التأخير في التقارير | **الأحدث** |
+| 2.6.0 | إضافة حقل ملاحظة في capture.tsx | سابق |
+| 2.5.0 | 4-layer DB hardening (toSafe+safeRun+globalGuard) | سابق |
+| 2.2.0 | عداد تنازلي، APK مبني | APK قديم |
+
+**ملاحظة:** `runtimeVersion` حُذف من app.json — لا تعيد إضافته.
+
+---
+
+## ⚠️ ميزة عرض الملاحظات في التقارير
+
+### المنطق:
+- `r.note` تظهر **فقط** إذا كان السجل متأخراً (`checkLateEntry().isLate === true`)
+- إذا صوّر قبل انتهاء وقت السماح → لا تظهر الملاحظة مطلقاً
+
+### أين تظهر:
+| المكان | الشكل |
+|---|---|
+| PDF | `📝 سبب التأخير: (نص)` تحت الوقت مباشرة |
+| PDF (قسم منفصل) | جدول "ملاحظات التأخير" في آخر التقرير |
+| واتساب | قسم `📝 أسباب التأخير` بعد ملخص الإحصائيات |
+| CSV | عمود "سبب التأخير" — فارغ إذا لم يكن متأخراً |
+| قائمة السجل | شارة `📝` حمراء + chip `⚠️ تأخر • ملاحظة مُرفقة` |
+
+---
+
+## ⚠️ نظام الحماية الرباعي لقاعدة البيانات (v2.5.0)
+
+لا تتجاوز هذه الطبقات أبداً:
+
+**Layer 1 — toSafe():** تحويل كل قيمة لـ primitive آمن
+```typescript
+function toSafe(v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v === 'string') return v;
+  // ...
+}
+```
+
+**Layer 2 — safeRun():** كل write لـ SQLite يجب أن يمر عبره
+**Layer 3 — Debug Logger (dev only)**
+**Layer 4 — installGlobalGuard():** monkey-patch على proto.runSync
+
+---
+
+## ⚠️ بناء APK — كيف تبني APK جديد يدوياً؟
+
+```bash
+# لا يمكن بدون EXPO_TOKEN صالح — انتهت المجانية
+# عند تجديد الحساب أو الترقية:
+cd /tmp/eas-fresh/artifacts/attendance
+EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
+  eas build --platform android --profile preview --non-interactive
+
+# بعد البناء: ارفع APK على GitHub Releases
+# ثم حدّث: https://github.com/zozoaooccc1/attendance-releases/blob/main/version.json
+```
+
+---
+
+## ⚠️ settings.tsx — يحتاج مراجعة
+
+ملف `settings.tsx` قد يحتوي على references لـ `expo-updates` مثل:
+- `Updates.channel`
+- `Updates.updateId`  
+- `Updates.runtimeVersion`
+
+**إذا فشل البناء بسبب هذا:** احذف هذه القيم أو استبدلها بـ `'—'`
+
+---
+
+## أوامر التطوير
+
+```bash
+# ── بناء APK (يحتاج EXPO_TOKEN صالح) ──
+EXPO_TOKEN=$EXPO_TOKEN eas build --platform android --profile preview --non-interactive --no-wait
+
+# ── فحص TypeScript ──
+cd artifacts/attendance && npx tsc --noEmit
+
+# ── تحديث ملف الإصدار بعد رفع APK ──
+# عدّل version.json في https://github.com/zozoaooccc1/attendance-releases
+```
+
+---
+
+## الأسرار والمتغيرات
+
+| الاسم في Replit Secrets | الوصف |
+|---|---|
+| `GITHUB_TOKEN` | GitHub Personal Access Token (repo scope) |
+| `EXPO_TOKEN` | EAS/Expo Authentication Token — **منتهي الصلاحية** |
+| `SESSION_SECRET` | للـ API server |
+
+---
+
+## قواعد مهمة للـ AI
+
+1. **اقرأ هذا الملف أولاً** في كل جلسة جديدة
+2. **OTA محذوف نهائياً** — لا تعيد `expo-updates` أو `runtimeVersion` أو `updates` في app.json
+3. **التحديث الآن عبر APK** — عبر `githubUpdateChecker.ts` + `AppUpdateModal.tsx`
+4. **بياناتك للمستخدمين محفوظة** عند تثبيت APK جديد (نفس `com.attendance.app`)
+5. **تحقق من toSafe+safeRun** قبل أي write لـ SQLite
+6. **note?: string** — لا null، فقط string أو undefined
+7. **بعد انتهاء الجلسة**: حدّث هذا الملف بكل تغيير جديد
+8. **settings.tsx** قد يحتاج تحديثاً لإزالة expo-updates references
+9. **ملف الإصدار العام**: `https://raw.githubusercontent.com/zozoaooccc1/attendance-releases/main/version.json`
+
+---
+
+## مشاكل معروفة وحلولها
+
+| المشكلة | السبب | الحل |
+|---|---|---|
+| `Cannot convert '[object Object]' to Kotlin` | قيمة غير آمنة لـ expo-sqlite v15 | 4-layer: toSafe+safeRun+debugLogger+globalGuard |
+| APK build يفشل | TypeScript errors أو EXPO_TOKEN منتهي | فحص tsc + تجديد Token |
+| settings.tsx لا تعمل | references لـ expo-updates المحذوف | احذف/استبدل Updates.* بقيم ثابتة |
+| `npm install` يفشل | `catalog:` protocol من pnpm | استخدم symlink من clone مثبّت |
+| `note: null` TypeScript error | `note?: string` لا يقبل null | استخدم `undefined` أو احذف المفتاح |
+
+---
+
+## تاريخ التحديثات
+
+### 2026-06-11 — إلغاء OTA + نظام APK (v2.7.0)
+- **حُذف نهائياً:** `expo-updates` من package.json وapp.json و_layout.tsx
+- **حُذف نهائياً:** `runtimeVersion`, `updates` section من app.json
+- **أُضيف:** `utils/githubUpdateChecker.ts` — يفحص version.json عام بدون auth
+- **أُضيف:** `components/AppUpdateModal.tsx` — modal إشعار APK جديد مع رابط تنزيل
+- **أُنشئ Repo عام:** `zozoaooccc1/attendance-releases` يحتوي `version.json`
+- **حُدِّث:** `crashGuard.ts` — إزالة expo-updates، استخدام Constants.expoConfig.version
+- **ميزة ملاحظات التأخير:** history.tsx + reports.tsx (PDF/واتساب/CSV)
+
+### 2026-06-11 — ملاحظات التأخير في التقارير
+- **history.tsx:** شارة 📝 + chip تظهر فقط عند تأخر مع ملاحظة
+- **reports.tsx:** ملاحظة التأخير في PDF + جدول منفصل + واتساب + CSV
+- القاعدة: الملاحظة تظهر فقط إذا `checkLateEntry().isLate === true`
+
+### 2026-06-11 — الجلسة الثانية عشرة (v2.6.0)
+- إضافة حقل الملاحظة في capture.tsx (200 حرف، note.trim() || undefined)
+
+### 2026-06-11 — الجلسة الثانية عشرة (v2.5.0)
+- 4-layer DB protection: toSafe+safeRun+debugLogger+installGlobalGuard
+
+### 2026-06-11 — OneSignal Push Notifications (v2.8.0)
+- **أُضيف:** `react-native-onesignal@5.5.1` + `onesignal-expo-plugin@2.7.0`
+- **أُضيف:** `utils/oneSignalService.ts` — تهيئة OneSignal وطلب الأذونات
+- **حُدِّث:** `app/_layout.tsx` — تهيئة OneSignal عند بدء التطبيق
+- **حُدِّث:** `app.json` — إضافة plugin `onesignal-expo-plugin` + version رُفع لـ `2.8.0`
+- **حُدِّث:** `constants/changelog.ts` — CURRENT_VERSION = '2.8.0'
+- **حُدِّث:** `pnpm-workspace.yaml` — إضافة react-native-onesignal وonesignal-expo-plugin لـ minimumReleaseAgeExclude
+- **OneSignal App ID:** محفوظ في Replit Secret باسم `ONESIGNAL_APP_ID`
+- **القيمة:** `4b67803a-e800-4f83-974b-32615789ed23`
+- **EAS Build v2.8.0:** https://expo.dev/accounts/amr9925487962/projects/attendance/builds/e1899c66-42fc-443e-88b4-632d3c962322
+
+---
+
+## OneSignal — تفاصيل الدمج (v2.8.0)
+
+### ما أُضيف:
+
+**`utils/oneSignalService.ts`** (ملف جديد):
+```typescript
+import OneSignal from 'react-native-onesignal';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+export function initOneSignal() {
+  if (Platform.OS === 'web') return;
+  const appId = Constants.expoConfig?.extra?.oneSignalAppId ?? '';
+  if (!appId) return;
+  OneSignal.initialize(appId);
+  OneSignal.Notifications.requestPermission(true);
+}
+```
+
+**في `app/_layout.tsx`:**
+```typescript
+import { initOneSignal } from '@/utils/oneSignalService';
+// في useEffect أو مباشرة عند تحميل الـ layout:
+initOneSignal();
+```
+
+**في `app.json`:**
+```json
+{
+  "expo": {
+    "version": "2.8.0",
+    "plugins": [
+      ["onesignal-expo-plugin", { "mode": "development" }],
+      ...
+    ],
+    "extra": {
+      "oneSignalAppId": "4b67803a-e800-4f83-974b-32615789ed23"
+    }
+  }
+}
+```
+
+### ملاحظات مهمة:
+- OneSignal يعمل فقط على Android/iOS — تجاهل web (`Platform.OS === 'web'`)
+- `onesignal-expo-plugin` يحتاج Development Build (لا يعمل في Expo Go)
+- App ID ثابت — لا تغيّره
+
+---
+
+## ⚠️ EAS Build — حساب ثانٍ (v2.8.0)
+
+### السبب:
+حساب Expo الأول (`bsmhrbee3`) استنفد كوتة البناء الشهرية المجانية.
+
+### الحساب الثاني:
+| البند | القيمة |
+|---|---|
+| اسم المستخدم | `amr9925487962` |
+| EXPO_TOKEN | محفوظ في Replit Secret: `EXPO_TOKEN_2` |
+| EAS Project ID | `e0d07504-ef8f-4a60-9ce3-92694b0d6804` |
+| Project slug | `attendance` |
+
+### كيفية البناء بالحساب الثاني:
+```bash
+# من /tmp/attendance-build/artifacts/attendance
+EXPO_TOKEN=$EXPO_TOKEN_2 eas build \
+  --platform android \
+  --profile preview \
+  --non-interactive \
+  --no-wait
+```
+
+### eas.json يجب أن يحتوي:
+```json
+{
+  "build": {
+    "preview": {
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_TOKEN": "" }
+    }
+  }
+}
+```
+
+### ⚠️ قواعد مهمة:
+- **`EAS_SKIP_AUTO_FINGERPRINT=1`** — أضفه دائماً لتجنب fingerprint mismatch
+- **Project ID في app.json** — يجب أن يكون `e0d07504-ef8f-4a60-9ce3-92694b0d6804` (الحساب الثاني)
+- **بعد البناء:** ارفع APK على GitHub Releases وحدّث version.json
+
+### رابط مشروع EAS:
+https://expo.dev/accounts/amr9925487962/projects/attendance
+
+---
+
+## معاينة الويب في Replit (Web Preview)
+
+تم إنشاء artifact في Replit لعرض التطبيق على الويب:
+- **المسار:** `artifacts/attendance/` في workspace
+- **Preview Path:** `/attendance/`
+- **Port:** 25477
+- **الحالة:** يعرض UI وهمي (mock data) مشابه للتطبيق الحقيقي
+
+### ⚠️ ما لا يعمل في Web Preview:
+- الكاميرا (Camera) — تحتاج جهاز حقيقي
+- SQLite database — native only
+- OneSignal notifications — native only
+- expo-local-authentication — native only
+
+### ما يعمل في Web Preview:
+- التصميم الكامل بالعربية (RTL)
+- التنقل بين التبويبات (4 tabs)
+- شاشة اليوم + السجل + التقويم + التقارير + الإعدادات
+- بيانات وهمية للعرض
+
+---
+
+
+---
+
+## 2026-06-12 — جلسة جديدة: تبويب الموظف + EAS Update Checker
+
+### ما أُضيف في هذه الجلسة:
+
+#### 1. تبويب "بيانات الموظف" (الخامس)
+- **الملف:** `app/(tabs)/employee.tsx` — شاشة بيانات الموظف
+- **السياق:** `context/EmployeeContext.tsx` — يخزن الاسم والقسم في AsyncStorage
+- **الموقع:** تبويب خامس قبل "اليوم" في `_layout.tsx` (TAB_COUNT=5)
+- **محدود التصميم مع إضافته:** `app/_layout.tsx` ← `EmployeeProvider` مُضاف
+
+#### 2. إعادة تصميم `employee.tsx` — موحَّد مع لغة التطبيق
+واجهة "بيانات الموظف" أُعيد بناؤها كاملاً لتطابق نمط `settings.tsx` و `index.tsx`:
+
+| العنصر | النمط المستخدم |
+|---|---|
+| مجموعات الحقول | `groupLabel` + `groupCard` (borderRadius 14, borderWidth 1) |
+| صفوف الحقول | `settingsRow` (flexDirection row, paddingH 14, paddingV 13, gap 12) |
+| أيقونات الصفوف | `rowIcon` (34×34, borderRadius 9, لون + 20% opacity) |
+| فاصل بين الحقول | `RowSep` — خط رفيع يبدأ من marginLeft 60 |
+| اختيار الشفت | `chips` أفقية (flex-row, borderRadius 10, borderWidth 1) |
+| بطاقات الإحصائيات | نفس progressCard (borderRadius 14, borderWidth 1, padding 13) |
+| الخطوط | Inter_400/500/600/700 مطابقة لبقية التطبيق |
+| التعديل الإلكتروني | TextInput inline داخل الصف — يظهر عند الضغط، يُحفظ بالـ checkmark |
+
+#### 3. نظام فحص تحديثات EAS (يحل محل GitHub)
+- **الملف الجديد:** `utils/easUpdateChecker.ts`
+- **الملف المحدَّث:** `app/_layout.tsx` — import من `easUpdateChecker` بدلاً من `githubUpdateChecker`
+- **الملف المحدَّث:** `app.config.js` — يضيف `expoToken: process.env.EXPO_TOKEN` في `extra`
+
+##### كيف يعمل النظام الجديد:
+1. التطبيق يستعلم `https://api.expo.dev/graphql` مباشرةً
+2. يطلب آخر بناء Android (FINISHED) عبر GraphQL:
+   ```graphql
+   app { byId(appId: "e0d07504-ef8f-4a60-9ce3-92694b0d6804") {
+     builds(limit:1, offset:0, platform:ANDROID, status:FINISHED) {
+       appVersion appBuildVersion createdAt
+       artifacts { applicationArchiveUrl }
+     }
+   }}
+   ```
+3. إذا كان `appVersion` أحدث من الإصدار الحالي → يعرض `AppUpdateModal`
+4. رابط التحميل: مباشر من `expo.dev/artifacts/eas/*.apk` — **بدون GitHub**
+
+##### إعداد التوكن للبناء:
+```bash
+# مرة واحدة فقط — يحفظ التوكن في EAS Secrets:
+eas secret:create --scope project --name EXPO_TOKEN --value <token>
+# بعدها يُدمج تلقائياً في كل APK بناء
+```
+في التطبيق: `Constants.expoConfig?.extra?.expoToken`
+
+#### 4. تحديث خريطة الملفات
+
+```
+artifacts/attendance/
+├── app.config.js                         ← [محدَّث] expoToken في extra
+├── app/
+│   ├── _layout.tsx                       ← [محدَّث] import easUpdateChecker + EmployeeProvider
+│   └── (tabs)/
+│       └── employee.tsx                  ← [جديد/محدَّث] تبويب بيانات الموظف
+├── context/
+│   └── EmployeeContext.tsx               ← [جديد] اسم الموظف + القسم في AsyncStorage
+└── utils/
+    ├── easUpdateChecker.ts               ← [جديد] فحص التحديثات عبر EAS GraphQL API
+    └── githubUpdateChecker.ts            ← [قديم — لا يُستخدم] GitHub version.json
+```
+
+#### 5. الأسرار المحدَّثة
+
+| الاسم | الحالة |
+|---|---|
+| `EXPO_TOKEN` | ✅ **صالح** — تم تخزينه في Replit Secrets (2026-06-12) |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | ✅ صالح — repo scope |
+| `SESSION_SECRET` | ✅ للـ API server |
+
+> **⚠️ تصحيح:** جدول الأسرار السابق أشار إلى EXPO_TOKEN كـ "منتهي الصلاحية" — هذا لم يعد صحيحاً. التوكن الحالي صالح.
+
+#### 6. قواعد مُحدَّثة للـ AI
+
+- **التحديثات الآن عبر EAS** — `easUpdateChecker.ts` هو المرجع، لا `githubUpdateChecker.ts`
+- **لا تحذف `githubUpdateChecker.ts`** — قد يُستخدم مرجعاً، لكن `_layout.tsx` يستورد من easUpdateChecker
+- **EmployeeProvider مضاف** في `app/_layout.tsx` — لا تنسَه عند إعادة البناء
+- **Tab count = 5** في `app/(tabs)/_layout.tsx`
+
+
+---
+
+## 2026-06-12 — إضافة اسم الموظف والقسم في التقارير
+
+### الملف المحدَّث: `app/(tabs)/reports.tsx`
+
+#### ما أُضيف:
+- **import:** `useEmployee` من `@/context/EmployeeContext`
+- **في المكوّن:** `const { employeeName, department } = useEmployee();`
+- **دوال محدَّثة:** `buildPdfHtml(records, period, employeeName, department)` و `buildCsv(records, period, employeeName, department)`
+
+#### كيف يظهر اسم الموظف والقسم:
+
+| نوع التصدير | المكان |
+|---|---|
+| **PDF** | سطر أزرق مميّز أسفل العنوان مباشرة: `👤 اسم الموظف  •  🏢 القسم` |
+| **PDF (عنوان المشاركة)** | `تقرير {الاسم} — {الفترة}` بدلاً من "تقرير الحضور" |
+| **CSV** | صفان في بداية الملف: `اسم الموظف,{الاسم}` و `القسم,{القسم}` |
+| **اسم ملف CSV** | `بصمتي_{الاسم}_{الفترة}.csv` |
+| **واتساب** | سطران أعلى التقرير: `👤 الموظف: *الاسم*` و `🏢 القسم: القسم` |
+
+#### ملاحظات التصميم:
+- إذا كان الاسم أو القسم فارغاً → لا يظهر ذلك السطر (لا تُكسر التقارير القديمة)
+- المعلومات تُقرأ من `EmployeeContext` التي تخزن البيانات في AsyncStorage
+
+
+---
+
+## 2026-06-12 — إعادة بناء نظام إشعار التحديثات (EAS Direct Install)
+
+### المشكلة السابقة:
+- `AppUpdateModal.tsx` كان يستورد من `githubUpdateChecker` (خطأ بعد إنشاء `easUpdateChecker`)
+- زر "تحميل" كان يفتح المتصفح برابط GitHub (المستخدم لا يريد GitHub)
+- نافذة التحديث لم تعرض Changelog حقيقياً — فقط نص عادي
+
+### الحل المُطبَّق — `components/AppUpdateModal.tsx`:
+
+#### تدفق التثبيت الجديد (بدون GitHub، بدون متصفح):
+```
+زر "تثبيت" → FileSystem.createDownloadResumable() → شريط تقدم %
+       ↓
+   APK محفوظ في cacheDirectory
+       ↓
+   Sharing.shareAsync(mimeType: 'application/vnd.android.package-archive')
+       ↓
+   Android يفتح نافذة التثبيت المدمجة مباشرة ✅
+```
+
+#### المراحل (phase):
+| المرحلة | الوصف |
+|---|---|
+| `idle` | زر "تثبيت التحديث" + "لاحقاً" |
+| `downloading` | شريط تقدم + نسبة % — الأزرار مخفية |
+| `ready` | ActivityIndicator "جارٍ فتح نافذة التثبيت..." |
+| `error` | رسالة الخطأ + "إعادة المحاولة" |
+
+#### Changelog حقيقي:
+- يستورد `getVersionChangelog(info.version)` من `constants/changelog.ts`
+- يعرض كل عنصر مع أيقونة ولون حسب النوع: `new`🟢 / `fix`🟡 / `improve`🔵
+- إذا لم يجد الإصدار في changelog → يعرض `info.notes` كنص عادي
+
+#### ملاحظات تقنية:
+- EAS URL يُعيد 307 redirect لـ S3 presigned — `downloadAsync` يتبعه تلقائياً
+- `Sharing.shareAsync('application/vnd.android.package-archive')` = package installer مباشرة على Android
+- Web: fallback لـ `Linking.openURL()`
+- Import صُحِّح: `from '@/utils/easUpdateChecker'` (لا githubUpdateChecker)
+
+### الملف المحدَّث:
+- `components/AppUpdateModal.tsx` — إعادة كتابة كاملة
+
+
+---
+
+## جلسة 2026-06-12 — الإصدار 2.9.0 + EAS Build
+
+### ما تم في هذه الجلسة:
+
+#### 1. رفع الإصدار إلى 2.9.0
+- `app.json` → `"version": "2.9.0"`
+- `constants/changelog.ts` → `CURRENT_VERSION = '2.9.0'` + entry جديد:
+  - تبويب "بيانات الموظف" الجديد
+  - التقارير تحمل اسم الموظف والقسم
+  - نظام التحديثات من EAS مع تثبيت APK مباشر
+  - شريط تقدم أثناء التحميل
+
+#### 2. EAS Build — الإصدار 2.9.0
+- **Build ID**: `251b43bc-46d9-4da7-8e8c-91f0a0a5a1f1`
+- **URL**: https://expo.dev/accounts/amr9925487962/projects/attendance/builds/251b43bc-46d9-4da7-8e8c-91f0a0a5a1f1
+- **Profile**: preview (APK مباشر)
+- **Status**: submitted ✅ — يبني في سحابة Expo
+
+#### 3. مشاكل واجهناها وحلولها (مهم لاحقاً):
+
+**مشكلة Clone:** `git clone` يستغرق أكثر من 60 ثانية في بيئة Replit
+- **الحل**: استخدم timeout=120000 في bash
+
+**مشكلة pnpm install (frozen lockfile):** lockfile قديم (packages جديدة مضافة)
+- **الحل**: `pnpm install --no-frozen-lockfile` (قد يتجاوز 120 ثانية أيضاً — ينتهي بـ exit -1 لكن يكمل التثبيت)
+
+**مشكلة catalog: protocol:** `npm install` لا يدعم pnpm `catalog:` protocol
+- **الحل**: لا تستخدم npm — استخدم pnpm فقط
+
+**مشكلة onesignal-expo-plugin/index.js فارغة:**
+```js
+// المشكلة: index.js يحتوي فقط module.exports = {};
+// الحل:
+echo "module.exports = require('./dist/index.js');" > /path/to/onesignal-expo-plugin/index.js
+```
+
+**مشكلة EAS "Failed to resolve plugin":**
+- EAS CLI يفحص الـ plugins محلياً قبل الرفع
+- pnpm virtual store لا يضيف symlinks تلقائياً في root node_modules
+- **الحل**: أنشئ symlinks يدوياً:
+```bash
+NM="/tmp/eas-v290/node_modules"
+PNPM="$NM/.pnpm"
+for PKG in expo-router expo-font expo-web-browser onesignal-expo-plugin expo-modules-core; do
+  PATTERN=$(ls "$PNPM" | grep "^${PKG}@" | head -1)
+  ln -sfn "$PNPM/$PATTERN/node_modules/$PKG" "$NM/$PKG"
+done
+```
+
+#### 4. كيف تُطلق EAS Build في المستقبل (الطريقة الصحيحة):
+
+```bash
+# 1. Clone نظيف
+git clone --depth 1 --single-branch --branch main \
+  "https://$GITHUB_PERSONAL_ACCESS_TOKEN@github.com/zozoaooccc1/attendance-extractor.git" \
+  /tmp/eas-build-NEW --timeout 120s
+
+# 2. pnpm install (يقبل exit -1 إذا الباقات اتثبتت)
+cd /tmp/eas-build-NEW && pnpm install --no-frozen-lockfile || true
+
+# 3. Symlink الـ plugins المطلوبة
+NM="/tmp/eas-build-NEW/node_modules"; PNPM="$NM/.pnpm"
+for PKG in expo-router expo-font expo-web-browser onesignal-expo-plugin expo-modules-core; do
+  PATTERN=$(ls "$PNPM" | grep "^${PKG}@" | head -1)
+  [ -n "$PATTERN" ] && ln -sfn "$PNPM/$PATTERN/node_modules/$PKG" "$NM/$PKG"
+done
+
+# 4. إصلاح onesignal index.js (إذا فارغ)
+OS_DIR=$(ls "$PNPM" | grep "^onesignal-expo-plugin" | head -1)
+echo "module.exports = require('./dist/index.js');" > "$PNPM/$OS_DIR/node_modules/onesignal-expo-plugin/index.js"
+
+# 5. EAS Build
+cd /tmp/eas-build-NEW/artifacts/attendance && \
+  EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
+  npx eas-cli build --platform android --profile preview --non-interactive --no-wait
+```
+
+### الملفات المُحدَّثة في هذه الجلسة:
+- `artifacts/attendance/app.json` — version → 2.9.0
+- `artifacts/attendance/constants/changelog.ts` — v2.9.0 entry + CURRENT_VERSION
+
+
+---
+
+## 2026-06-12 — نقل المشروع إلى Replit (إعداد البيئة)
+
+### ما تم في هذه الجلسة:
+
+#### 1. إعداد بيئة Replit
+- تم إضافة `GITHUB_TOKEN` و`EXPO_TOKEN` كـ Replit Secrets
+- تم سحب المشروع من `zozoaooccc1/attendance-extractor` عبر GITHUB_TOKEN
+- تم نسخ `artifacts/attendance/` إلى workspace Replit
+- تم تثبيت الحزم بـ `pnpm install --no-frozen-lockfile`
+- تم تسجيل artifact التطبيق وتشغيل workflow على port 25477
+
+#### 2. التعديلات على pnpm-workspace.yaml
+- إضافة `react-native-onesignal` و`onesignal-expo-plugin` إلى `minimumReleaseAgeExclude`
+
+#### 3. قواعد العمل الدائمة للـ AI في هذا المشروع
+
+> **⚠️ قواعد إلزامية — لا استثناء:**
+
+1. **GitHub Sync:** أي تعديل أو تطوير يُرسَل فوراً إلى GitHub (`zozoaooccc1/attendance-extractor`) عبر `GITHUB_TOKEN`
+2. **AI_CONTEXT.md:** مرجع المشروع — يُضاف عليه فقط (append) في نهاية كل جلسة. **ممنوع تعديل أو حذف المحتوى القديم أبداً.**
+3. **الإصدار الحالي:** `2.9.0` — راجع `app.json` و`constants/changelog.ts` قبل أي بناء APK جديد
+
+#### 4. طريقة الرفع إلى GitHub من Replit
+
+```bash
+# Push مع token مدمج في الرابط مباشرة
+git push "https://$GITHUB_TOKEN@github.com/zozoaooccc1/attendance-extractor.git" HEAD:main
+```
+
+#### 5. حالة البيئة
+- **Workflow:** يعمل على `/` (port 25477) — Expo Dev Server
+- **pnpm-workspace.yaml:** محدَّث بالاستثناءات المطلوبة
+- **EXPO_TOKEN:** صالح — يُستخدم للبناء عبر EAS (حساب `amr9925487962`)
+- **GITHUB_TOKEN:** صالح — يُستخدم للقراءة والكتابة
+- **ONESIGNAL_APP_ID:** `4b67803a-e800-4f83-974b-32615789ed23`
+
+---
+
+## 2026-06-12 — إصلاح settings.tsx (إزالة expo-updates)
+
+### المشكلة:
+`app/settings.tsx` كان لا يزال يستورد `expo-updates` بعد حذفه من المشروع:
+```ts
+import * as Updates from 'expo-updates'; // سطر 14
+```
+هذا سبب خطأ "Unable to resolve expo-updates" في Metro Bundler.
+
+### الحل:
+- **حُذف:** `import * as Updates from 'expo-updates';`
+- **حُدِّثت:** دالة `handleCheckUpdate()` — بدلاً من `Updates.checkForUpdateAsync()` تعرض الآن رسالة ثابتة:
+  > "يتحقق التطبيق من التحديثات تلقائياً عند كل فتح. الإصدار الحالي: X.X.X"
+- التحديثات الحقيقية تُعالَج تلقائياً في `_layout.tsx` عبر `easUpdateChecker.ts`
+
+### الملف المُصلَح:
+- `artifacts/attendance/app/settings.tsx`
+

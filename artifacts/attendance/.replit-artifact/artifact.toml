@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "تطبيق الحضور"
+version = "1.0.0"
+id = "artifacts/attendance"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 25477
+
+[services.development]
+run = "pnpm --filter @workspace/attendance run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/attendance", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/attendance", "run", "serve" ]
+
+[services.env]
+PORT = "25477"
+BASE_PATH = "/"
