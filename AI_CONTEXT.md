@@ -754,8 +754,12 @@ curl -X POST /api/notify/send \
 ```
 
 ### إعداد Webhook في Expo:
-لربط EAS Build تلقائياً، أضف في لوحة Expo:
-- URL: `https://<domain>/api/notify/eas-webhook`
-- Header: `x-notify-secret: <NOTIFY_SECRET>`
-- Event: `build.finished`
+**تم الربط تلقائياً عبر EAS CLI** في 2026-06-12:
+```bash
+eas webhook:create --event BUILD \
+  --url "https://<REPLIT_DEV_DOMAIN>/api/notify/eas-webhook" \
+  --secret "$NOTIFY_SECRET"
+```
+- **ملاحظة:** الـ NOTIFY_SECRET يجب أن يكون 16 حرفاً على الأقل (الحالي 48 حرفاً).
+- **ملاحظة:** الـ webhook مربوط بـ dev domain — عند النشر الإنتاجي يجب تحديثه بالـ domain الثابت.
 
