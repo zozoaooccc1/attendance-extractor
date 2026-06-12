@@ -1051,3 +1051,26 @@ EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
 - الفلتر `late` يستدعي `checkLateEntry` لكل سجل — قد يكون بطيئاً مع بيانات كثيرة، قابل للتخزين المؤقت لاحقاً
 - EXPO_PUBLIC_API_URL يجب ضبطه في app.config.js للكشّاف الذكي في الجهاز الحقيقي
 
+---
+
+## جلسة 2026-06-12 — الإصدار 3.1.0 (منبّه صاخب + حذف دقائق الزيادة)
+
+### الملفات المُعدَّلة (6 ملفات):
+1. `utils/notifications.native.ts` — قناة جديدة `attendance-alarm` (IMPORTANCE_MAX + bypassDnd) + دالة `scheduleAlarmBurst(shiftType)` تُجدول 180 إشعار كل 5 ثوانٍ لمدة 15 دقيقة (30 إشعار على iOS كل 30 ثانية)
+2. `context/SettingsContext.tsx` — إضافة `alarmBeforeShift: boolean` + `setAlarmBeforeShift`
+3. `app/settings.tsx` — استبدال "التنبيه المستمر" بـ"المنبّه الصاخب" + واجهة جديدة مع تحذير أحمر
+4. `app/(tabs)/employee.tsx` — حذف بطاقة "دقائق الزيادة" وعملياتها + حذف سطر `let bonus = 0` + حذف التعليق التوضيحي
+5. `constants/changelog.ts` — إضافة مدخل v3.1.0
+6. `app.json` — الإصدار 3.1.0 / versionCode 32
+
+### تفاصيل المنبّه الصاخب:
+- تقنية: DATE-trigger لكل إشعار فردي (ليس TIME_INTERVAL) — يتيح تخصيص النص لكل إشعار
+- Android: 180 إشعار (كل 5 ثوانٍ × 15 دقيقة) بـ micro-batch من 30 لتفادي الحظر
+- iOS: 30 إشعار (كل 30 ثانية × 15 دقيقة) لتجاوز حد 64 إشعار
+- القناة `attendance-alarm` لها `bypassDnd: true` + `lockscreenVisibility: PUBLIC` + `enableVibrate`
+- لا يمكن إيقافه إلا بإطفاء مفتاح "المنبّه الصاخب" في الإعدادات ثم حفظ
+
+### EAS Build:
+- ID: 41d3f1a2-b2cf-420f-84d6-81f9b3e355b3
+- رابط: https://expo.dev/accounts/amr9925487962/projects/attendance/builds/41d3f1a2-b2cf-420f-84d6-81f9b3e355b3
+
