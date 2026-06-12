@@ -8,13 +8,16 @@ export interface ChangelogItem {
 const changelog: ChangelogItem[] = [
   {
     version: '2.9.0',
-    title: 'بيانات الموظف + تحديثات مباشرة',
+    title: 'بيانات الموظف + تحديثات مباشرة + إشعارات APK',
     date: '2026-06-12',
     items: [
       { type: 'new',     text: 'تبويب جديد "بيانات الموظف": احفظ اسمك وقسمك ونوع دوامك' },
       { type: 'new',     text: 'التقارير تحمل اسم الموظف والقسم في PDF وواتساب وCSV' },
       { type: 'improve', text: 'نظام التحديثات يتحقق من EAS مباشرة — تثبيت APK بدون متصفح أو GitHub' },
       { type: 'improve', text: 'شريط تقدم أثناء تحميل التحديث مع عرض تفاصيل الميزات الجديدة' },
+      { type: 'new',     text: 'إشعار فوري عبر OneSignal عند اكتمال بناء APK جديد — حتى لو التطبيق مغلق' },
+      { type: 'fix',     text: 'إصلاح كراش عند بدء التشغيل: نقل تهيئة OneSignal داخل useEffect' },
+      { type: 'fix',     text: 'إزالة كتلة updates من app.config.js التي كانت تسبب تعارضاً مع expo-updates المحذوف' },
     ],
   },
   {
