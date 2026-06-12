@@ -2,7 +2,7 @@
   "expo": {
     "name": "تطبيق الحضور",
     "slug": "attendance",
-    "version": "2.9.1",
+    "version": "2.9.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "attendance",
@@ -16,7 +16,7 @@
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0f172a"
     },
     "ios": {
       "supportsTablet": false
