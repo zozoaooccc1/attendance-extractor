@@ -7,6 +7,16 @@ export interface ChangelogItem {
 
 const changelog: ChangelogItem[] = [
   {
+    version: '2.9.3',
+    title: 'الصفحة الرئيسية + إصلاح شفت الجمعة',
+    date: '2026-06-12',
+    items: [
+      { type: 'new',     text: 'اختيار الصفحة الرئيسية: حدد أي تبويب يفتح عند تشغيل التطبيق (الموظف، اليوم، السجل، التقويم، التقارير)' },
+      { type: 'fix',     text: 'يوم الجمعة أصبح دائماً شفت واحد — مقفل ولا يمكن تغييره' },
+      { type: 'improve', text: 'تحسين قسم الإعدادات: ترتيب أوضح وأقسام أكثر وضوحاً' },
+    ],
+  },
+  {
     version: '2.9.2',
     title: 'إصلاح تجمّد شاشة البداية',
     date: '2026-06-12',
@@ -110,4 +120,4 @@ export function getLatestChangelog(): ChangelogItem | null {
   return changelog[0] ?? null;
 }
 
-export const CURRENT_VERSION = '2.9.2';
+export const CURRENT_VERSION = '2.9.3';
