@@ -32,6 +32,8 @@ import {
 import { ShiftType } from '@/constants/types';
 import { CURRENT_VERSION } from '@/constants/changelog';
 import { moderateScale, clampFont, spacing, buildFontSize } from '@/utils/responsive';
+import { checkForAppUpdate, type AppUpdateInfo } from '@/utils/easUpdateChecker';
+import { AppUpdateModal } from '@/components/AppUpdateModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -66,7 +68,7 @@ function FontSlider({ value, onChange, colors: c }: { value: number; onChange: (
   const toPercent = (px: number) => {
     if (sliderWidthRef.current <= 0) return value;
     const raw = MIN + (px / sliderWidthRef.current) * (MAX - MIN);
-    return Math.max(MIN, Math.min(MAX, Math.round(raw / 5) * 5));
+    return Math.max(MIN, Math.min(MAX, Math.round(raw)));
   };
 
   const panResponder = useRef(
@@ -128,6 +130,7 @@ export default function SettingsScreen() {
     earlyReminder, setEarlyReminder,
     alarmBeforeShift, setAlarmBeforeShift,
     fontMultiplier, language, setLanguage, t, defaultTab, setDefaultTab,
+    maxStorageMB, setMaxStorageMB,
   } = useSettings();
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
   const { deleteOldRecords } = useAttendance();
@@ -143,6 +146,8 @@ export default function SettingsScreen() {
   const [autoDeleteMonths,    setAutoDeleteMonths]     = useState<number>(0);
   const [updateStatus,        setUpdateStatus]         = useState<UpdateStatus>('idle');
   const [openSection,         setOpenSection]          = useState<string | null>(null);
+  const [showUpdateModal,     setShowUpdateModal]      = useState(false);
+  const [updateInfo,          setUpdateInfo]           = useState<AppUpdateInfo | null>(null);
   const [isFrozen,            setIsFrozen]             = useState(false);
   // Storage stats
   const [storageStats,        setStorageStats]         = useState<{ count: number; totalMB: number } | null>(null);
@@ -188,13 +193,22 @@ export default function SettingsScreen() {
   };
 
   const handleCheckUpdate = async () => {
-    Alert.alert(
-      '🔄 التحديثات',
-      'يتحقق التطبيق من التحديثات تلقائياً عند كل فتح.\nالإصدار الحالي: ' + CURRENT_VERSION,
-      [{ text: 'حسناً' }]
-    );
-    setUpdateStatus('up-to-date');
-    setTimeout(() => setUpdateStatus('idle'), 3000);
+    if (updateStatus === 'checking') return;
+    setUpdateStatus('checking');
+    try {
+      const info = await checkForAppUpdate(true);
+      if (info) {
+        setUpdateInfo(info);
+        setShowUpdateModal(true);
+        setUpdateStatus('idle');
+      } else {
+        setUpdateStatus('up-to-date');
+        setTimeout(() => setUpdateStatus('idle'), 3000);
+      }
+    } catch {
+      setUpdateStatus('error');
+      setTimeout(() => setUpdateStatus('idle'), 3000);
+    }
   };
 
   const toggleNotifications = async (value: boolean) => {
@@ -382,11 +396,15 @@ export default function SettingsScreen() {
   const timeLabel  = timeFormat === '12h' ? t.settings.time12h : t.settings.time24h;
   const fontLabel  = `${fontSizePercent}%`;
 
-  // حساب شريط مساحة الصور (max = 500 MB للعرض)
-  const storageFillPct = storageStats ? Math.min(100, (storageStats.totalMB / 500) * 100) : 0;
-  const storageColor   = storageFillPct > 70 ? '#ef4444' : storageFillPct > 40 ? '#f59e0b' : '#22c55e';
+  // حساب شريط مساحة الصور (max = maxStorageMB أو غير محدود)
+  const storageFillPct = storageStats && maxStorageMB > 0
+    ? Math.min(100, (storageStats.totalMB / maxStorageMB) * 100)
+    : 0;
+  const storageColor      = storageFillPct > 70 ? '#ef4444' : storageFillPct > 40 ? '#f59e0b' : '#22c55e';
+  const storageLimitLabel = maxStorageMB === -1 ? 'غير محدود' : maxStorageMB >= 1000 ? `${maxStorageMB / 1000} GB` : `${maxStorageMB} MB`;
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.content, { paddingTop: topPad + spacing.md, paddingBottom: insets.bottom + 40 }]}
@@ -739,7 +757,23 @@ export default function SettingsScreen() {
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color: storageColor, fontSize: 10, fontFamily: 'Inter_600SemiBold' }}>{storageStats.totalMB} MB مستخدمة</Text>
-                <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>500 MB</Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>{storageLimitLabel}</Text>
+              </View>
+              {/* اختيار الحد الأقصى للمساحة */}
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                {([500, 1000, 2000, -1] as const).map(mb => (
+                  <TouchableOpacity key={mb}
+                    style={[{ paddingHorizontal: moderateScale(10), paddingVertical: 5, borderRadius: moderateScale(8), borderWidth: 1 },
+                      maxStorageMB === mb
+                        ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                        : { backgroundColor: colors.muted, borderColor: colors.border }]}
+                    onPress={() => setMaxStorageMB(mb)}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Inter_600SemiBold',
+                      color: maxStorageMB === mb ? colors.primaryForeground : colors.mutedForeground }}>
+                      {mb === -1 ? '∞' : mb >= 1000 ? `${mb / 1000}GB` : `${mb}MB`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
           )}
@@ -910,6 +944,14 @@ export default function SettingsScreen() {
       </Text>
 
     </ScrollView>
+    {updateInfo && (
+      <AppUpdateModal
+        visible={showUpdateModal}
+        info={updateInfo}
+        onDismiss={() => { setShowUpdateModal(false); setUpdateInfo(null); }}
+      />
+    )}
+    </View>
   );
 }
 
