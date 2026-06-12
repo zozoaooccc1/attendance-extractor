@@ -131,10 +131,10 @@ export default function TodayScreen() {
   const isFriday = isFridayDate(now);
 
   useEffect(() => {
-    if (isFriday && shiftType === 'double' && todayRecords.length === 0) {
+    if (isFriday && shiftType !== 'single') {
       setShiftType('single');
     }
-  }, [isFriday]);
+  }, [isFriday, shiftType]);
 
   // Feature 3: Count late entries this month
   useEffect(() => {
@@ -184,6 +184,7 @@ export default function TodayScreen() {
   };
 
   const handleShiftChange = (shift: ShiftType) => {
+    if (isFriday) { Alert.alert('يوم الجمعة', 'يوم الجمعة دائماً شفت واحد — لا يمكن تغييره.'); return; }
     if (todayRecords.length > 0) { Alert.alert(t.error, 'لا يمكن تغيير نوع الدوام بعد تسجيل الحضور.'); return; }
     Haptics.selectionAsync();
     setShiftType(shift);
