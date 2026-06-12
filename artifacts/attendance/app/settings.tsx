@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Platform, Switch, Alert, ActivityIndicator,
-  LayoutAnimation, UIManager,
+  LayoutAnimation, UIManager, PanResponder, GestureResponderEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
-import { exportBackupToDownloads, importBackupFromDownloads, restoreFromBackupData, getInternalBackupInfo } from '@/utils/backup';
+import {
+  exportBackupToDownloads, exportFullBackupToDownloads,
+  importBackupFromDownloads, restoreFromBackupData, getInternalBackupInfo,
+} from '@/utils/backup';
+import { getImagesStats, deleteImagesOlderThan } from '@/utils/imageStorage';
 import { useColors } from '@/hooks/useColors';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
 import { useSettings, TimeFormat, FontScale, DefaultTab } from '@/context/SettingsContext';
@@ -54,13 +58,76 @@ const DOUBLE_SCHEDULE = [
 
 type UpdateStatus = 'idle'|'checking'|'downloading'|'up-to-date'|'error';
 
+// ── مكوّن شريط تمرير حجم الخط ───────────────────────────────────────────────
+function FontSlider({ value, onChange, colors: c }: { value: number; onChange: (v: number) => void; colors: any }) {
+  const MIN = 80, MAX = 150;
+  const sliderWidthRef = useRef(0);
+
+  const toPercent = (px: number) => {
+    if (sliderWidthRef.current <= 0) return value;
+    const raw = MIN + (px / sliderWidthRef.current) * (MAX - MIN);
+    return Math.max(MIN, Math.min(MAX, Math.round(raw / 5) * 5));
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (e: GestureResponderEvent) => onChange(toPercent(e.nativeEvent.locationX)),
+      onPanResponderMove:  (e: GestureResponderEvent) => onChange(toPercent(e.nativeEvent.locationX)),
+    })
+  ).current;
+
+  const fillPct = ((value - MIN) / (MAX - MIN)) * 100;
+  const THUMB = 22;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View
+        style={{ height: 36, justifyContent: 'center', paddingHorizontal: THUMB / 2 }}
+        onLayout={e => { sliderWidthRef.current = e.nativeEvent.layout.width - THUMB; }}
+        {...panResponder.panHandlers}
+      >
+        {/* Track */}
+        <View style={{ height: 6, backgroundColor: c.border, borderRadius: 3, marginHorizontal: THUMB / 2 }}>
+          <View style={{ height: 6, width: `${fillPct}%` as any, backgroundColor: c.primary, borderRadius: 3 }} />
+        </View>
+        {/* Thumb */}
+        <View style={{
+          position: 'absolute',
+          left: `${fillPct}%` as any,
+          width: THUMB, height: THUMB, borderRadius: THUMB / 2,
+          backgroundColor: c.primary,
+          marginLeft: -THUMB / 2 + THUMB / 2,
+          top: (36 - THUMB) / 2,
+          shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, elevation: 4,
+          borderWidth: 2, borderColor: '#fff',
+        }} />
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+        <Text style={{ color: c.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' }}>80%</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: c.primary, fontSize: 16, fontFamily: 'Inter_700Bold' }}>{value}%</Text>
+          <Text style={{ color: c.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>حجم الخط</Text>
+        </View>
+        <Text style={{ color: c.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular' }}>150%</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const colors       = useColors();
   const insets       = useSafeAreaInsets();
   const router       = useRouter();
   const { preference, setPreference, resolvedScheme } = useTheme();
-  const { timeFormat, setTimeFormat, fontScale, setFontScale, earlyReminder, setEarlyReminder,
-          fontMultiplier, language, setLanguage, t, defaultTab, setDefaultTab } = useSettings();
+  const {
+    timeFormat, setTimeFormat, fontScale, setFontScale,
+    fontSizePercent, setFontSizePercent,
+    highContrast, setHighContrast,
+    earlyReminder, setEarlyReminder,
+    fontMultiplier, language, setLanguage, t, defaultTab, setDefaultTab,
+  } = useSettings();
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
   const { deleteOldRecords } = useAttendance();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -69,14 +136,24 @@ export default function SettingsScreen() {
   const [notifShift,          setNotifShift]           = useState<ShiftType>('single');
   const [persistentReminder,  setPersistentReminder]   = useState(false);
   const [saving,              setSaving]               = useState(false);
-  const [testingSend,       setTestingSend]        = useState(false);
-  const [biometricEnabled,  setBiometricEnabled]   = useState(false);
-  const [biometricAvailable,setBiometricAvailable] = useState(false);
-  const [pinEnabled,        setPinEnabled]         = useState(false);
-  const [autoDeleteMonths,  setAutoDeleteMonths]   = useState<number>(0);
-  const [updateStatus,      setUpdateStatus]       = useState<UpdateStatus>('idle');
-  const [openSection,       setOpenSection]        = useState<string | null>(null);
-  const [isFrozen,          setIsFrozen]           = useState(false);
+  const [testingSend,         setTestingSend]          = useState(false);
+  const [biometricEnabled,    setBiometricEnabled]     = useState(false);
+  const [biometricAvailable,  setBiometricAvailable]   = useState(false);
+  const [pinEnabled,          setPinEnabled]           = useState(false);
+  const [autoDeleteMonths,    setAutoDeleteMonths]     = useState<number>(0);
+  const [updateStatus,        setUpdateStatus]         = useState<UpdateStatus>('idle');
+  const [openSection,         setOpenSection]          = useState<string | null>(null);
+  const [isFrozen,            setIsFrozen]             = useState(false);
+  // Storage stats
+  const [storageStats,        setStorageStats]         = useState<{ count: number; totalMB: number } | null>(null);
+  const [loadingStorage,      setLoadingStorage]       = useState(false);
+  const [cleaningImages,      setCleaningImages]       = useState(false);
+  const [cleanMonths,         setCleanMonths]          = useState<number>(6);
+  // Backup
+  const [backingUp,           setBackingUp]            = useState(false);
+  const [backingUpFull,       setBackingUpFull]        = useState(false);
+  const [backupProgress,      setBackupProgress]       = useState(0);
+  const [restoring,           setRestoring]            = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(NOTIF_KEY).then(v => {
@@ -91,7 +168,19 @@ export default function SettingsScreen() {
         if (has) LocalAuthentication.isEnrolledAsync().then(enrolled => setBiometricAvailable(enrolled));
       });
     }
+    loadStorageStats();
   }, []);
+
+  const loadStorageStats = async () => {
+    if (Platform.OS === 'web') return;
+    setLoadingStorage(true);
+    try {
+      const stats = await getImagesStats();
+      setStorageStats(stats);
+    } finally {
+      setLoadingStorage(false);
+    }
+  };
 
   const toggleSection = (key: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -159,13 +248,30 @@ export default function SettingsScreen() {
         const paths = deleteOldRecords(`${yy}-${mm}-${dd}`);
         for (const p of paths) { try { await FileSystem.deleteAsync(p, { idempotent: true }); } catch {} }
         Alert.alert('تم', `تم حذف السجلات الأقدم من ${months} أشهر`);
+        loadStorageStats();
       }},
     ]);
   };
 
-  // Feature 10: Backup
-  const [backingUp, setBackingUp] = useState(false);
-  const [restoring, setRestoring] = useState(false);
+  const handleCleanImages = async () => {
+    Alert.alert(
+      '🗑️ تنظيف الصور القديمة',
+      `سيتم حذف صور البصمة الأقدم من ${cleanMonths} أشهر بشكل نهائي.\nالسجلات ستبقى كما هي بدون صور.\n\nهل تريد المتابعة؟`,
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'تنظيف', style: 'destructive', onPress: async () => {
+          setCleaningImages(true);
+          try {
+            const deleted = await deleteImagesOlderThan(cleanMonths);
+            await loadStorageStats();
+            Alert.alert('✅ تم التنظيف', `تم حذف ${deleted} صورة قديمة\nتم تحرير مساحة تخزين`);
+          } finally {
+            setCleaningImages(false);
+          }
+        }},
+      ]
+    );
+  };
 
   const handleBackup = async () => {
     if (Platform.OS === 'web') { Alert.alert('النسخ الاحتياطي', 'متاح فقط على الجوال'); return; }
@@ -173,15 +279,37 @@ export default function SettingsScreen() {
     try {
       const result = await exportBackupToDownloads();
       if (result === 'ok') {
-        Alert.alert('✅ تم الحفظ', 'تم حفظ النسخة الاحتياطية في المجلد الذي اخترته بنجاح.\nيمكنك استخدامها لاستعادة بياناتك بعد إعادة تثبيت التطبيق.');
-      } else if (result === 'cancelled') {
-        // User cancelled, do nothing
-      } else {
+        Alert.alert('✅ تم الحفظ', 'تم حفظ النسخة الاحتياطية (بيانات فقط، بدون صور) في المجلد الذي اخترته.');
+      } else if (result !== 'cancelled') {
         Alert.alert('خطأ', 'فشل إنشاء النسخة الاحتياطية');
       }
-    } finally {
-      setBackingUp(false);
-    }
+    } finally { setBackingUp(false); }
+  };
+
+  const handleFullBackup = async () => {
+    if (Platform.OS === 'web') { Alert.alert('النسخ الاحتياطي', 'متاح فقط على الجوال'); return; }
+    const stats = storageStats;
+    Alert.alert(
+      '📦 نسخة شاملة مع الصور',
+      `ستشمل هذه النسخة:\n• جميع سجلاتك\n• ${stats?.count ?? '?'} صورة بصمة (${stats?.totalMB ?? '?'} MB)\n\nقد تستغرق بعض الوقت حسب عدد الصور. هل تريد المتابعة؟`,
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'حفظ', onPress: async () => {
+          setBackingUpFull(true);
+          setBackupProgress(0);
+          try {
+            const result = await exportFullBackupToDownloads((done, total) => {
+              setBackupProgress(Math.round((done / total) * 100));
+            });
+            if (result === 'ok') {
+              Alert.alert('✅ تم الحفظ', 'تم حفظ النسخة الشاملة (بيانات + صور) في المجلد الذي اخترته.');
+            } else if (result !== 'cancelled') {
+              Alert.alert('خطأ', 'فشل إنشاء النسخة الشاملة');
+            }
+          } finally { setBackingUpFull(false); setBackupProgress(0); }
+        }},
+      ]
+    );
   };
 
   const handleRestore = async () => {
@@ -189,26 +317,22 @@ export default function SettingsScreen() {
     setRestoring(true);
     try {
       const data = await importBackupFromDownloads();
-      if (!data) {
-        Alert.alert('لم يُعثر على نسخة', 'تأكد أن ملف النسخة الاحتياطية موجود في المجلد المحدد.');
-        return;
-      }
+      if (!data) { Alert.alert('لم يُعثر على نسخة', 'تأكد أن ملف النسخة الاحتياطية موجود في المجلد المحدد.'); return; }
+      const hasImages = data.images && Object.keys(data.images).length > 0;
       Alert.alert(
         'استيراد النسخة الاحتياطية',
-        `تم العثور على ${data.records?.length ?? 0} سجل بتاريخ ${new Date(data.exportedAt).toLocaleDateString('ar')}. هل تريد الاستيراد؟`,
+        `تم العثور على ${data.records?.length ?? 0} سجل${hasImages ? ` + صور` : ''} بتاريخ ${new Date(data.exportedAt).toLocaleDateString('ar')}. هل تريد الاستيراد؟`,
         [
           { text: 'إلغاء', style: 'cancel' },
           { text: 'استيراد', onPress: async () => {
-            const { restored, skipped } = await restoreFromBackupData(data);
-            Alert.alert('✅ تم الاستيراد', `تمت استعادة ${restored} سجل${skipped > 0 ? ` (تخطي ${skipped} مكرر)` : ''}`);
+            const { restored, skipped, imagesRestored } = await restoreFromBackupData(data);
+            Alert.alert('✅ تم الاستيراد', `تمت استعادة ${restored} سجل${skipped > 0 ? ` (تخطي ${skipped} مكرر)` : ''}${imagesRestored > 0 ? `\n+ ${imagesRestored} صورة` : ''}`);
+            loadStorageStats();
           }},
         ]
       );
-    } catch {
-      Alert.alert('خطأ', 'فشل استيراد النسخة الاحتياطية');
-    } finally {
-      setRestoring(false);
-    }
+    } catch { Alert.alert('خطأ', 'فشل استيراد النسخة الاحتياطية'); }
+    finally { setRestoring(false); }
   };
 
   const handleToggleFreeze = async (value: boolean) => {
@@ -225,14 +349,12 @@ export default function SettingsScreen() {
         else await scheduleDoubleShiftReminders(earlyReminder ? 5 : 0);
         if (persistentReminder) await schedulePersistentReminders();
         const msg = persistentReminder
-          ? (language === 'ar' ? 'التنبيه المستمر مفعّل — إشعارات متكررة قبل بصمة الدخول' : 'Persistent reminders enabled before each check-in')
-          : earlyReminder
-            ? t.settings.notify5minEarly
-            : (language === 'ar' ? 'التنبيهات عند موعد البصمة' : 'Notifications set at check-in time');
-        Alert.alert(language === 'ar' ? 'تم حفظ الإعدادات' : 'Saved', msg, [{ text: language === 'ar' ? 'حسناً' : 'OK' }]);
+          ? 'التنبيه المستمر مفعّل — إشعارات متكررة قبل بصمة الدخول'
+          : earlyReminder ? t.settings.notify5minEarly : 'التنبيهات عند موعد البصمة';
+        Alert.alert('تم حفظ الإعدادات', msg, [{ text: 'حسناً' }]);
       } else {
         await cancelAllAttendanceReminders();
-        Alert.alert(language === 'ar' ? 'تم' : 'Done', language === 'ar' ? 'تم إيقاف التنبيهات' : 'Notifications disabled');
+        Alert.alert('تم', 'تم إيقاف التنبيهات');
       }
     } catch { Alert.alert('خطأ', 'فشل الحفظ'); }
     finally { setSaving(false); }
@@ -245,17 +367,21 @@ export default function SettingsScreen() {
   ];
 
   const updateBtnConfig = {
-    idle:          { label: t.settings.checkUpdate,       icon: 'cloud-download-outline'   as const, bg: colors.primary },
-    checking:      { label: t.settings.checkingUpdate,    icon: 'cloud-download-outline'   as const, bg: colors.primary },
-    downloading:   { label: t.settings.downloadingUpdate, icon: 'cloud-download-outline'   as const, bg: colors.primary },
-    'up-to-date':  { label: t.settings.upToDate,          icon: 'checkmark-circle-outline' as const, bg: colors.success ?? '#22c55e' },
-    error:         { label: t.settings.updateError,       icon: 'alert-circle-outline'     as const, bg: '#ef4444' },
+    idle:         { label: t.settings.checkUpdate,       icon: 'cloud-download-outline'   as const, bg: colors.primary },
+    checking:     { label: t.settings.checkingUpdate,    icon: 'cloud-download-outline'   as const, bg: colors.primary },
+    downloading:  { label: t.settings.downloadingUpdate, icon: 'cloud-download-outline'   as const, bg: colors.primary },
+    'up-to-date': { label: t.settings.upToDate,          icon: 'checkmark-circle-outline' as const, bg: colors.success ?? '#22c55e' },
+    error:        { label: t.settings.updateError,       icon: 'alert-circle-outline'     as const, bg: '#ef4444' },
   }[updateStatus];
 
-  const schedule   = notifShift === 'single' ? SINGLE_SCHEDULE : DOUBLE_SCHEDULE;
+  const schedule  = notifShift === 'single' ? SINGLE_SCHEDULE : DOUBLE_SCHEDULE;
   const themeLabel = themeOptions.find(o => o.key === preference)?.label ?? '';
   const timeLabel  = timeFormat === '12h' ? t.settings.time12h : t.settings.time24h;
-  const fontLabel  = fontScale === 'sm' ? t.settings.fontSmall : fontScale === 'lg' ? t.settings.fontLarge : t.settings.fontMedium;
+  const fontLabel  = `${fontSizePercent}%`;
+
+  // حساب شريط مساحة الصور (max = 500 MB للعرض)
+  const storageFillPct = storageStats ? Math.min(100, (storageStats.totalMB / 500) * 100) : 0;
+  const storageColor   = storageFillPct > 70 ? '#ef4444' : storageFillPct > 40 ? '#f59e0b' : '#22c55e';
 
   return (
     <ScrollView
@@ -326,25 +452,21 @@ export default function SettingsScreen() {
         )}
         <RowSep colors={colors} />
 
-        {/* Font size */}
+        {/* Font size — شريط تمرير */}
         <SRow colors={colors} styles={styles} icon="text-outline" iconColor="#3b82f6"
           title={t.settings.fontSize} value={fontLabel}
           expanded={openSection === 'font'} onPress={() => toggleSection('font')} />
         {openSection === 'font' && (
           <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
-            <View style={styles.chipRow}>
-              {(['sm','md','lg'] as FontScale[]).map(s => (
-                <TouchableOpacity key={s}
-                  style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.muted },
-                    fontScale === s && { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                  onPress={() => setFontScale(s)}
-                >
-                  <Text style={[styles.chipText, { color: fontScale === s ? colors.primaryForeground : colors.mutedForeground },
-                    fontScale === s && { fontFamily: 'Inter_700Bold' }]}>
-                    {s === 'sm' ? t.settings.fontSmall : s === 'lg' ? t.settings.fontLarge : t.settings.fontMedium}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <FontSlider value={fontSizePercent} onChange={setFontSizePercent} colors={colors} />
+            {/* معاينة سريعة */}
+            <View style={{ backgroundColor: colors.muted, borderRadius: moderateScale(10), padding: moderateScale(12), marginTop: 4 }}>
+              <Text style={{ color: colors.foreground, fontSize: 14 * fontMultiplier, fontFamily: 'Inter_700Bold', textAlign: 'center' }}>
+                معاينة حجم الخط الحالي
+              </Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12 * fontMultiplier, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 4 }}>
+                مستخرج الحضور — {fontSizePercent}%
+              </Text>
             </View>
           </View>
         )}
@@ -370,6 +492,23 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
+        <RowSep colors={colors} />
+
+        {/* High contrast toggle */}
+        <View style={styles.settingsRow}>
+          <View style={[styles.rowIcon, { backgroundColor: '#f59e0b20' }]}>
+            <Ionicons name="contrast-outline" size={moderateScale(18)} color="#f59e0b" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowTitle, { color: colors.foreground }]}>وضع عالي التباين</Text>
+            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
+              ألوان فاقعة — مناسب للأماكن المضيئة وضوء الشمس
+            </Text>
+          </View>
+          <Switch value={highContrast} onValueChange={setHighContrast}
+            trackColor={{ false: colors.muted, true: '#f59e0b' }}
+            thumbColor={highContrast ? '#fff' : colors.mutedForeground} />
+        </View>
 
       </View>
 
@@ -439,7 +578,6 @@ export default function SettingsScreen() {
                 trackColor={{ false: colors.muted, true: colors.primary }}
                 thumbColor={earlyReminder ? colors.primaryForeground : colors.mutedForeground} />
             </View>
-
             <RowSep colors={colors} />
             <View style={styles.settingsRow}>
               <View style={[styles.rowIcon, { backgroundColor: '#ef444420' }]}>
@@ -453,18 +591,15 @@ export default function SettingsScreen() {
                 trackColor={{ false: colors.muted, true: '#ef4444' }}
                 thumbColor={persistentReminder ? '#fff' : colors.mutedForeground} />
             </View>
-
             <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
-              {/* Persistent reminder covers ALL check-in times for both shifts */}
               <View style={[styles.chipRow, { marginBottom: moderateScale(4) }]}>
                 <View style={[styles.chip, { backgroundColor: '#ef444415', borderColor: '#ef444440', flex: 1, justifyContent: 'center' }]}>
                   <Ionicons name="notifications-circle-outline" size={moderateScale(14)} color="#ef4444" />
                   <Text style={[styles.chipText, { color: '#ef4444', fontFamily: 'Inter_600SemiBold' }]}>
-                    {language === 'ar' ? 'يطبّق على جميع بصمات الدخول (شفت + شفتين)' : 'Applies to all check-ins (all shifts)'}
+                    يطبّق على جميع بصمات الدخول (شفت + شفتين)
                   </Text>
                 </View>
               </View>
-
               <View style={[styles.scheduleBox, { borderColor: colors.border }]}>
                 {[
                   { time: '8:45 — 9:00 ص', label: 'قبل بصمة الشفت الأول',   icon: 'notifications-outline' as const },
@@ -482,7 +617,6 @@ export default function SettingsScreen() {
                   </View>
                 ))}
               </View>
-
               <View style={{ flexDirection: 'row', gap: moderateScale(8) }}>
                 <TouchableOpacity
                   style={[styles.actionBtn, { flex: 1, borderColor: colors.primary + '50', backgroundColor: colors.primary + '12' }, testingSend && { opacity: 0.6 }]}
@@ -510,7 +644,6 @@ export default function SettingsScreen() {
             </View>
           </>
         )}
-
       </View>
 
       {/* ══════════════ GROUP: الأمان ══════════════ */}
@@ -518,7 +651,6 @@ export default function SettingsScreen() {
         {language === 'ar' ? 'الأمان والقفل' : 'Security & Lock'}
       </Text>
       <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-
         <View style={styles.settingsRow}>
           <View style={[styles.rowIcon, { backgroundColor: '#22c55e20' }]}>
             <Ionicons name="finger-print-outline" size={moderateScale(18)} color="#22c55e" />
@@ -529,13 +661,10 @@ export default function SettingsScreen() {
               {biometricEnabled ? t.settings.biometricNoteActive : t.settings.biometricNote}
             </Text>
           </View>
-          <Switch
-            value={biometricEnabled}
-            onValueChange={biometricAvailable ? toggleBiometric : undefined}
+          <Switch value={biometricEnabled} onValueChange={biometricAvailable ? toggleBiometric : undefined}
             disabled={!biometricAvailable}
             trackColor={{ false: colors.muted, true: colors.primary }}
-            thumbColor={biometricEnabled ? colors.primaryForeground : colors.mutedForeground}
-          />
+            thumbColor={biometricEnabled ? colors.primaryForeground : colors.mutedForeground} />
         </View>
         <RowSep colors={colors} />
         <View style={styles.settingsRow}>
@@ -550,37 +679,94 @@ export default function SettingsScreen() {
           </View>
           {pinEnabled ? (
             <View style={{ flexDirection: 'row', gap: moderateScale(6) }}>
-              <TouchableOpacity
-                style={[styles.miniBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]}
-                onPress={() => router.push('/pin-setup')}
-              >
+              <TouchableOpacity style={[styles.miniBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '40' }]} onPress={() => router.push('/pin-setup')}>
                 <Ionicons name="create-outline" size={moderateScale(15)} color={colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.miniBtn, { backgroundColor: '#ef444415', borderColor: '#ef444440' }]}
-                onPress={handleDisablePIN}
-              >
+              <TouchableOpacity style={[styles.miniBtn, { backgroundColor: '#ef444415', borderColor: '#ef444440' }]} onPress={handleDisablePIN}>
                 <Ionicons name="close-outline" size={moderateScale(15)} color="#ef4444" />
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity
-              style={[styles.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
-              onPress={() => { setPinEnabled(false); router.push('/pin-setup'); }}
-            >
+            <TouchableOpacity style={[styles.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={() => { setPinEnabled(false); router.push('/pin-setup'); }}>
               <Ionicons name="add-outline" size={moderateScale(15)} color={colors.primaryForeground} />
             </TouchableOpacity>
           )}
         </View>
-
       </View>
 
-      {/* ══════════════ GROUP: التخزين ══════════════ */}
+      {/* ══════════════ GROUP: التخزين والبيانات ══════════════ */}
       <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>
         {language === 'ar' ? 'التخزين والبيانات' : 'Storage & Data'}
       </Text>
       <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
 
+        {/* إحصاء الصور + شريط المساحة */}
+        <View style={[styles.rowExpand, { borderTopWidth: 0, paddingTop: moderateScale(14) }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: moderateScale(10), marginBottom: moderateScale(10) }}>
+            <View style={[styles.rowIcon, { backgroundColor: '#8b5cf620' }]}>
+              {loadingStorage
+                ? <ActivityIndicator size="small" color="#8b5cf6" />
+                : <Ionicons name="images-outline" size={moderateScale(18)} color="#8b5cf6" />}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowTitle, { color: colors.foreground }]}>مساحة الصور</Text>
+              {storageStats ? (
+                <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
+                  {storageStats.count} صورة بصمة — {storageStats.totalMB} MB
+                </Text>
+              ) : (
+                <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>جارٍ الحساب...</Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={loadStorageStats} style={[styles.miniBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Ionicons name="refresh-outline" size={moderateScale(15)} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          {/* شريط المساحة البصري */}
+          {storageStats && (
+            <View style={{ gap: 6, marginBottom: moderateScale(10) }}>
+              <View style={{ height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: 'hidden' }}>
+                <View style={{ height: 8, width: `${storageFillPct}%` as any, backgroundColor: storageColor, borderRadius: 4 }} />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: storageColor, fontSize: 10, fontFamily: 'Inter_600SemiBold' }}>{storageStats.totalMB} MB مستخدمة</Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 10, fontFamily: 'Inter_400Regular' }}>500 MB</Text>
+              </View>
+            </View>
+          )}
+
+          {/* تنظيف الصور القديمة */}
+          <View style={{ flexDirection: 'row', gap: moderateScale(8), alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowSub, { color: colors.mutedForeground, marginBottom: 4 }]}>احذف صور أقدم من:</Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {([3, 6, 12] as const).map(m => (
+                  <TouchableOpacity key={m}
+                    style={[{ paddingHorizontal: moderateScale(10), paddingVertical: 5, borderRadius: moderateScale(8), borderWidth: 1 },
+                      cleanMonths === m ? { backgroundColor: '#ef4444', borderColor: '#ef4444' } : { backgroundColor: colors.muted, borderColor: colors.border }]}
+                    onPress={() => setCleanMonths(m)}
+                  >
+                    <Text style={{ color: cleanMonths === m ? '#fff' : colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_600SemiBold' }}>{m}ش</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#ef444415', borderColor: '#ef444440' }, cleaningImages && { opacity: 0.6 }]}
+              onPress={handleCleanImages} disabled={cleaningImages}
+            >
+              {cleaningImages
+                ? <ActivityIndicator size="small" color="#ef4444" />
+                : <Ionicons name="trash-outline" size={moderateScale(15)} color="#ef4444" />}
+              <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>تنظيف</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <RowSep colors={colors} />
+
+        {/* الحذف التلقائي للسجلات */}
         <SRow colors={colors} styles={styles} icon="trash-outline" iconColor="#ef4444"
           title={t.settings.autoDelete}
           value={autoDeleteMonths === 0 ? t.settings.autoDeleteOff : t.settings.autoDeleteMonths(autoDeleteMonths)}
@@ -591,10 +777,7 @@ export default function SettingsScreen() {
               {([0,3,6,12] as const).map(m => (
                 <TouchableOpacity key={m}
                   style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.muted },
-                    autoDeleteMonths === m && {
-                      backgroundColor: m === 0 ? colors.primary : '#ef4444',
-                      borderColor:     m === 0 ? colors.primary : '#ef4444',
-                    }]}
+                    autoDeleteMonths === m && { backgroundColor: m === 0 ? colors.primary : '#ef4444', borderColor: m === 0 ? colors.primary : '#ef4444' }]}
                   onPress={() => handleAutoDelete(m)}
                 >
                   <Text style={[styles.chipText, { color: autoDeleteMonths === m ? '#fff' : colors.mutedForeground },
@@ -608,40 +791,45 @@ export default function SettingsScreen() {
         )}
 
         <RowSep colors={colors} />
-        <TouchableOpacity
-          style={[styles.settingsRow, { opacity: backingUp ? 0.6 : 1 }]}
-          onPress={handleBackup}
-          disabled={backingUp}
-        >
+
+        {/* حفظ نسخة بيانات فقط */}
+        <TouchableOpacity style={[styles.settingsRow, { opacity: backingUp ? 0.6 : 1 }]} onPress={handleBackup} disabled={backingUp}>
           <View style={[styles.rowIcon, { backgroundColor: '#3b82f620' }]}>
-            {backingUp
-              ? <ActivityIndicator size="small" color="#3b82f6" />
-              : <Ionicons name="save-outline" size={moderateScale(18)} color="#3b82f6" />}
+            {backingUp ? <ActivityIndicator size="small" color="#3b82f6" /> : <Ionicons name="save-outline" size={moderateScale(18)} color="#3b82f6" />}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.rowTitle, { color: colors.foreground }]}>حفظ نسخة للتنزيلات</Text>
+            <Text style={[styles.rowTitle, { color: colors.foreground }]}>نسخة احتياطية (بيانات)</Text>
+            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>يحفظ السجلات فقط — بدون صور</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={moderateScale(16)} color={colors.mutedForeground} />
+        </TouchableOpacity>
+
+        <RowSep colors={colors} />
+
+        {/* حفظ نسخة شاملة مع الصور */}
+        <TouchableOpacity style={[styles.settingsRow, { opacity: backingUpFull ? 0.6 : 1 }]} onPress={handleFullBackup} disabled={backingUpFull}>
+          <View style={[styles.rowIcon, { backgroundColor: '#8b5cf620' }]}>
+            {backingUpFull ? <ActivityIndicator size="small" color="#8b5cf6" /> : <Ionicons name="archive-outline" size={moderateScale(18)} color="#8b5cf6" />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.rowTitle, { color: colors.foreground }]}>نسخة شاملة (مع الصور)</Text>
             <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
-              احفظ جميع سجلاتك في مجلد خارجي — تبقى بعد حذف التطبيق
+              {backingUpFull ? `جارٍ الحفظ... ${backupProgress}%` : `يشمل جميع صور البصمة (${storageStats?.totalMB ?? '?'} MB)`}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={moderateScale(16)} color={colors.mutedForeground} />
         </TouchableOpacity>
+
         <RowSep colors={colors} />
-        <TouchableOpacity
-          style={[styles.settingsRow, { opacity: restoring ? 0.6 : 1 }]}
-          onPress={handleRestore}
-          disabled={restoring}
-        >
+
+        {/* استيراد نسخة احتياطية */}
+        <TouchableOpacity style={[styles.settingsRow, { opacity: restoring ? 0.6 : 1 }]} onPress={handleRestore} disabled={restoring}>
           <View style={[styles.rowIcon, { backgroundColor: '#22c55e20' }]}>
-            {restoring
-              ? <ActivityIndicator size="small" color="#22c55e" />
-              : <Ionicons name="cloud-upload-outline" size={moderateScale(18)} color="#22c55e" />}
+            {restoring ? <ActivityIndicator size="small" color="#22c55e" /> : <Ionicons name="cloud-upload-outline" size={moderateScale(18)} color="#22c55e" />}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.rowTitle, { color: colors.foreground }]}>استيراد نسخة احتياطية</Text>
-            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
-              استعد سجلاتك من ملف نسخة محفوظة سابقاً
-            </Text>
+            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>استعد سجلاتك من ملف نسخة محفوظة سابقاً</Text>
           </View>
           <Ionicons name="chevron-forward" size={moderateScale(16)} color={colors.mutedForeground} />
         </TouchableOpacity>
@@ -653,7 +841,6 @@ export default function SettingsScreen() {
         {language === 'ar' ? 'عن التطبيق' : 'About'}
       </Text>
       <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-
         <View style={styles.settingsRow}>
           <View style={[styles.rowIcon, { backgroundColor: '#8b5cf620' }]}>
             <Ionicons name="information-circle-outline" size={moderateScale(18)} color="#8b5cf6" />
@@ -663,8 +850,7 @@ export default function SettingsScreen() {
         </View>
         <RowSep colors={colors} />
         <SRow colors={colors} styles={styles} icon="wifi-outline" iconColor="#8b5cf6"
-          title={t.settings.offline}
-          expanded={openSection === 'offline'} onPress={() => toggleSection('offline')} />
+          title={t.settings.offline} expanded={openSection === 'offline'} onPress={() => toggleSection('offline')} />
         {openSection === 'offline' && (
           <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
             <Text style={[styles.rowSub, { color: colors.mutedForeground, lineHeight: moderateScale(22) }]}>
@@ -672,16 +858,12 @@ export default function SettingsScreen() {
             </Text>
           </View>
         )}
-
       </View>
 
-
-      {/* ══════════════ GROUP: أدوات المطور (dev only) ══════════════ */}
+      {/* ══════════════ GROUP: أدوات المطور ══════════════ */}
       {Constants.expoConfig?.extra?.appVariant === 'development' && (
         <>
-          <Text style={[styles.groupLabel, { color: '#f97316' }]}>
-            🔧 أدوات المطور
-          </Text>
+          <Text style={[styles.groupLabel, { color: '#f97316' }]}>🔧 أدوات المطور</Text>
           <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: '#f97316', borderWidth: 1.5 }]}>
             <View style={styles.settingsRow}>
               <View style={[styles.rowIcon, { backgroundColor: '#f9731620' }]}>
@@ -690,15 +872,11 @@ export default function SettingsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rowTitle, { color: colors.foreground }]}>تجميد التحديثات</Text>
                 <Text style={[styles.rowSub, { color: isFrozen ? '#f97316' : colors.mutedForeground }]}>
-                  {isFrozen ? '🔒 مجمّد — لن يستقبل التطبيق أي OTA' : 'التحديثات تعمل بشكل طبيعي'}
+                  {isFrozen ? '🔒 مجمّد' : 'التحديثات تعمل بشكل طبيعي'}
                 </Text>
               </View>
-              <Switch
-                value={isFrozen}
-                onValueChange={handleToggleFreeze}
-                trackColor={{ false: colors.border, true: '#f97316' }}
-                thumbColor="#fff"
-              />
+              <Switch value={isFrozen} onValueChange={handleToggleFreeze}
+                trackColor={{ false: colors.border, true: '#f97316' }} thumbColor="#fff" />
             </View>
           </View>
         </>
@@ -741,11 +919,7 @@ function SRow({ colors, styles, icon, iconColor, title, sub, value, expanded, on
         {!!sub && <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{sub}</Text>}
       </View>
       {!!value && <Text style={[styles.rowValue, { color: colors.mutedForeground }]}>{value}</Text>}
-      <Ionicons
-        name={expanded ? 'chevron-up' : 'chevron-down'}
-        size={moderateScale(16)}
-        color={colors.mutedForeground}
-      />
+      <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={moderateScale(16)} color={colors.mutedForeground} />
     </TouchableOpacity>
   );
 }
@@ -762,32 +936,25 @@ function createStyles(mul: number = 1) {
     headerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: moderateScale(8) },
     iconBtn:     { width: moderateScale(40), height: moderateScale(40), alignItems: 'center', justifyContent: 'center', borderRadius: moderateScale(20) },
     title:       { fontSize: clampFont(20, 17, 24) * mul },
-
     groupLabel:  { fontSize: fs.xs, fontFamily: 'Inter_600SemiBold', letterSpacing: 0.5, marginTop: moderateScale(14), marginBottom: moderateScale(5), marginLeft: moderateScale(4) },
     groupCard:   { borderRadius: moderateScale(14), borderWidth: 1, overflow: 'hidden' },
-
     settingsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: moderateScale(14), paddingVertical: moderateScale(13), gap: moderateScale(12) },
     rowIcon:     { width: moderateScale(34), height: moderateScale(34), borderRadius: moderateScale(9), alignItems: 'center', justifyContent: 'center' },
     rowTitle:    { fontSize: fs.base, fontFamily: 'Inter_500Medium' },
     rowSub:      { fontSize: fs.xs, fontFamily: 'Inter_400Regular', marginTop: 2 },
     rowValue:    { fontSize: fs.sm, fontFamily: 'Inter_400Regular' },
-
     rowExpand:   { paddingHorizontal: moderateScale(14), paddingBottom: moderateScale(14), paddingTop: moderateScale(12), borderTopWidth: 1, gap: moderateScale(10) },
     chipRow:     { flexDirection: 'row', gap: moderateScale(8), flexWrap: 'wrap' },
     chip:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: moderateScale(10), borderRadius: moderateScale(10), borderWidth: 1 },
     chipText:    { fontSize: fs.sm, fontFamily: 'Inter_500Medium' },
-
     scheduleBox: { borderRadius: moderateScale(10), borderWidth: 1, overflow: 'hidden' },
     schedItem:   { flexDirection: 'row', alignItems: 'center', gap: moderateScale(10), paddingVertical: moderateScale(8), paddingHorizontal: moderateScale(10) },
     schedIcon:   { width: moderateScale(30), height: moderateScale(30), borderRadius: moderateScale(8), alignItems: 'center', justifyContent: 'center' },
     schedTime:   { fontSize: fs.base },
-
-    actionBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: moderateScale(10), paddingVertical: moderateScale(11), gap: moderateScale(7), borderWidth: 1 },
+    actionBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: moderateScale(10), paddingVertical: moderateScale(11), paddingHorizontal: moderateScale(14), gap: moderateScale(7), borderWidth: 1 },
     actionBtnText: { fontSize: fs.sm, fontFamily: 'Inter_600SemiBold' },
-
-    miniBtn: { width: moderateScale(34), height: moderateScale(34), borderRadius: moderateScale(9), borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-
-    updateBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: moderateScale(12), paddingVertical: moderateScale(13), gap: moderateScale(8), marginTop: moderateScale(10) },
+    miniBtn:     { width: moderateScale(34), height: moderateScale(34), borderRadius: moderateScale(9), borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+    updateBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: moderateScale(12), paddingVertical: moderateScale(13), gap: moderateScale(8), marginTop: moderateScale(10) },
     updateBtnText: { fontSize: fs.base },
   });
 }
