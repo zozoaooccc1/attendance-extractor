@@ -20,7 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AttendanceProvider } from "@/context/AttendanceContext";
 import { ThemeProvider } from "@/context/ThemeContext";
-import { SettingsProvider } from "@/context/SettingsContext";
+import { SettingsProvider, useSettings } from "@/context/SettingsContext";
 import { EmployeeProvider } from "@/context/EmployeeContext";
 import { isPINEnabled, verifyPIN } from "@/utils/pinAuth";
 import { moderateScale, clampFont } from "@/utils/responsive";
@@ -189,6 +189,12 @@ function RootLayoutNav() {
       <Stack.Screen name="settings" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
     </Stack>
   );
+}
+
+function SettingsGate() {
+  const { settingsLoaded } = useSettings();
+  if (!settingsLoaded) return null;
+  return <RootLayoutNav />;
 }
 
 export default function RootLayout() {
@@ -381,7 +387,7 @@ export default function RootLayout() {
                 <KeyboardProvider>
                   <AttendanceProvider>
                     <EmployeeProvider>
-                      <RootLayoutNav />
+                      <SettingsGate />
                     </EmployeeProvider>
                   </AttendanceProvider>
                 </KeyboardProvider>
