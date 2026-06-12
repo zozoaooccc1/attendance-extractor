@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Language, AppTranslations, translations, RTL_LANGUAGES } from '@/i18n/index';
 
 export type TimeFormat = '12h' | '24h';
-export type FontScale = 'sm' | 'md' | 'lg'; // kept for backward compat only
+export type FontScale = 'sm' | 'md' | 'lg';
 export type DefaultTab = 'employee' | 'index' | 'history' | 'calendar' | 'reports';
 export type { Language };
 
@@ -12,12 +12,14 @@ interface SettingsContextType {
   setTimeFormat: (f: TimeFormat) => void;
   fontScale: FontScale;
   setFontScale: (s: FontScale) => void;
-  fontSizePercent: number;            // 80–150
+  fontSizePercent: number;
   setFontSizePercent: (v: number) => void;
   highContrast: boolean;
   setHighContrast: (v: boolean) => void;
   earlyReminder: boolean;
   setEarlyReminder: (v: boolean) => void;
+  alarmBeforeShift: boolean;
+  setAlarmBeforeShift: (v: boolean) => void;
   formatTime: (hhmm: string) => string;
   fontMultiplier: number;
   language: Language;
@@ -39,18 +41,19 @@ function legacyScaleToPercent(s: unknown): number {
 }
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [timeFormat, setTF] = useState<TimeFormat>('12h');
-  const [fontScale, setFS] = useState<FontScale>('md');
-  const [fontSizePercent, setFSP] = useState<number>(100);
-  const [highContrast, setHC] = useState<boolean>(false);
-  const [earlyReminder, setER] = useState(false);
-  const [language, setLang] = useState<Language>('ar');
-  const [defaultTab, setDT] = useState<DefaultTab>('index');
+  const [timeFormat,       setTF]  = useState<TimeFormat>('12h');
+  const [fontScale,        setFS]  = useState<FontScale>('md');
+  const [fontSizePercent,  setFSP] = useState<number>(100);
+  const [highContrast,     setHC]  = useState<boolean>(false);
+  const [earlyReminder,    setER]  = useState(false);
+  const [alarmBeforeShift, setABS] = useState(false);
+  const [language,         setLang] = useState<Language>('ar');
+  const [defaultTab,       setDT]  = useState<DefaultTab>('index');
 
   useEffect(() => {
     AsyncStorage.multiGet([KEY, LANG_KEY]).then(pairs => {
       const settingsStr = pairs[0][1];
-      const langStr = pairs[1][1];
+      const langStr     = pairs[1][1];
       if (settingsStr) {
         try {
           const s = JSON.parse(settingsStr);
@@ -58,12 +61,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           if (typeof s.fontSizePercent === 'number') {
             setFSP(s.fontSizePercent);
           } else if (s.fontScale) {
-            // backward compat: convert old sm/md/lg to percent
             setFSP(legacyScaleToPercent(s.fontScale));
             setFS(s.fontScale);
           }
-          if (typeof s.highContrast === 'boolean') setHC(s.highContrast);
-          if (typeof s.earlyReminder === 'boolean') setER(s.earlyReminder);
+          if (typeof s.highContrast     === 'boolean') setHC(s.highContrast);
+          if (typeof s.earlyReminder    === 'boolean') setER(s.earlyReminder);
+          if (typeof s.alarmBeforeShift === 'boolean') setABS(s.alarmBeforeShift);
           if (s.defaultTab) setDT(s.defaultTab as DefaultTab);
         } catch {}
       }
@@ -78,24 +81,23 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const setTimeFormat = useCallback((f: TimeFormat) => { setTF(f); persist({ timeFormat: f }); }, [persist]);
-
-  const setFontScale = useCallback((s: FontScale) => {
+  const setTimeFormat      = useCallback((f: TimeFormat) => { setTF(f);   persist({ timeFormat: f }); }, [persist]);
+  const setFontScale       = useCallback((s: FontScale)  => {
     const pct = legacyScaleToPercent(s);
     setFS(s); setFSP(pct);
     persist({ fontScale: s, fontSizePercent: pct });
   }, [persist]);
-
   const setFontSizePercent = useCallback((v: number) => {
     const clamped = Math.max(80, Math.min(150, Math.round(v / 5) * 5));
     setFSP(clamped);
     persist({ fontSizePercent: clamped });
   }, [persist]);
 
-  const setHighContrast = useCallback((v: boolean) => { setHC(v); persist({ highContrast: v }); }, [persist]);
-  const setEarlyReminder = useCallback((v: boolean) => { setER(v); persist({ earlyReminder: v }); }, [persist]);
-  const setLanguage = useCallback((l: Language) => { setLang(l); AsyncStorage.setItem(LANG_KEY, l); }, []);
-  const setDefaultTab = useCallback((tab: DefaultTab) => { setDT(tab); persist({ defaultTab: tab }); }, [persist]);
+  const setHighContrast     = useCallback((v: boolean) => { setHC(v);   persist({ highContrast: v });     }, [persist]);
+  const setEarlyReminder    = useCallback((v: boolean) => { setER(v);   persist({ earlyReminder: v });    }, [persist]);
+  const setAlarmBeforeShift = useCallback((v: boolean) => { setABS(v);  persist({ alarmBeforeShift: v }); }, [persist]);
+  const setLanguage         = useCallback((l: Language) => { setLang(l); AsyncStorage.setItem(LANG_KEY, l); }, []);
+  const setDefaultTab       = useCallback((tab: DefaultTab) => { setDT(tab); persist({ defaultTab: tab }); }, [persist]);
 
   const t = translations[language];
 
@@ -118,6 +120,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       fontSizePercent, setFontSizePercent,
       highContrast, setHighContrast,
       earlyReminder, setEarlyReminder,
+      alarmBeforeShift, setAlarmBeforeShift,
       formatTime, fontMultiplier,
       language, setLanguage, t, isRTL,
       defaultTab, setDefaultTab,
