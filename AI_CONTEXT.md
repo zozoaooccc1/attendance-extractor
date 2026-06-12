@@ -1024,3 +1024,30 @@ EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
   ./node_modules/.bin/eas build \
   --platform android --profile preview --non-interactive --no-wait
 ```
+
+---
+
+## جلسة 2026-06-12 — الإصدار 3.0.0 (5 ميزات كبرى)
+
+### الملفات المُعدَّلة (12 ملف):
+1. `context/SettingsContext.tsx` — أضيف `fontSizePercent` (80-150%) + `highContrast` boolean
+2. `constants/colors.ts` — أضيف لوح ألوان `highContrast` (ألوان فاقعة)
+3. `hooks/useColors.ts` — يعيد ألوان highContrast عند تفعيل الوضع
+4. `utils/imageStorage.native.ts` — أضيف `getImagesStats()` + `deleteImagesOlderThan()` + `readImageAsBase64()` + `writeImageFromBase64()`
+5. `utils/backup.native.ts` — أضيف `exportFullBackupToDownloads()` (نسخة مع صور بصيغة v3.0) + `restoreFromBackupData` يستعيد الصور أيضاً
+6. `app/settings.tsx` — شريط تمرير الخط (PanResponder) + وضع التباين العالي + إحصاءات التخزين + نسخة شاملة
+7. `app/(tabs)/history.tsx` — فلاتر (الكل/تأخيرات/هذا الشهر/جمعة) + ترتيب (أحدث/أقدم) + البحث في الملاحظات
+8. `app/capture.tsx` — بطاقة الكشّاف الذكي (AI) + استخراج الوقت من صورة البصمة
+9. `constants/changelog.ts` — إضافة مدخل v3.0.0
+10. `app.json` — الإصدار 3.0.0 / versionCode 31
+11. `artifacts/api-server/src/routes/ai-scan.ts` — نقطة Gemini Vision للكشّاف الذكي (ملف جديد)
+12. `artifacts/api-server/src/routes/index.ts` — تسجيل ai-scan route
+
+### ملاحظات مهمة للجلسات القادمة:
+- الكشّاف الذكي يتطلب `GEMINI_API_KEY` في متغيرات بيئة api-server (تُضبط في Replit Secrets)
+- النسخة الشاملة مع الصور تستخدم صيغة `v3.0` مع حقل `images: Record<string, base64>`
+- شريط تمرير الخط يستخدم PanResponder المدمج — بدون مكتبات خارجية
+- وضع التباين العالي يُطبَّق في `useColors.ts` بالتحقق من `highContrast` قبل `resolvedScheme`
+- الفلتر `late` يستدعي `checkLateEntry` لكل سجل — قد يكون بطيئاً مع بيانات كثيرة، قابل للتخزين المؤقت لاحقاً
+- EXPO_PUBLIC_API_URL يجب ضبطه في app.config.js للكشّاف الذكي في الجهاز الحقيقي
+
