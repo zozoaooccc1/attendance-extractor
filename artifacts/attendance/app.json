@@ -2,7 +2,7 @@
   "expo": {
     "name": "تطبيق الحضور",
     "slug": "attendance",
-    "version": "3.1.2",
+    "version": "3.1.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "attendance",
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.attendance.app",
-      "versionCode": 34,
+      "versionCode": 35,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
