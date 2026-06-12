@@ -939,3 +939,88 @@ EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
   --platform android --profile preview --non-interactive --no-wait
 ```
 **ملاحظة:** لا تستخدم `npx eas-cli` بل استخدم `./node_modules/.bin/eas` من داخل المشروع.
+
+---
+
+## 2026-06-12 — v2.9.3: اختيار الصفحة الرئيسية + قفل شفت الجمعة
+
+### الميزات والإصلاحات:
+
+#### 1. اختيار الصفحة الرئيسية (جديد)
+**الملفات:** `context/SettingsContext.tsx` + `app/settings.tsx` + `app/(tabs)/_layout.tsx`
+- أضيف `DefaultTab` type: `'employee' | 'index' | 'history' | 'calendar' | 'reports'`
+- أضيف `defaultTab` و `setDefaultTab` في `SettingsContext`
+- قسم جديد في الإعدادات "الصفحة الرئيسية" بـ 5 chips لاختيار التبويب الافتراضي
+- `(tabs)/_layout.tsx` يستخدم `initialRouteName={defaultTab}` عند بدء التطبيق
+- القيمة الافتراضية: `'index'` (اليوم) — محفوظة في AsyncStorage
+
+#### 2. قفل شفت الجمعة (إصلاح)
+**الملف:** `app/(tabs)/index.tsx`
+```typescript
+// قبل (خطأ): يغير فقط إذا لا توجد سجلات
+if (isFriday && shiftType === 'double' && todayRecords.length === 0) {
+  setShiftType('single');
+}
+
+// بعد (صحيح): يقفل دائماً بغض النظر عن السجلات
+useEffect(() => {
+  if (isFriday && shiftType !== 'single') {
+    setShiftType('single');
+  }
+}, [isFriday, shiftType]);
+
+// handleShiftChange: يمنع التغيير على الجمعة
+const handleShiftChange = (shift: ShiftType) => {
+  if (isFriday) { Alert.alert('يوم الجمعة', 'يوم الجمعة دائماً شفت واحد — لا يمكن تغييره.'); return; }
+  ...
+};
+```
+
+### الملفات المُعدَّلة (6 ملفات مرفوعة لـ GitHub):
+| الملف | التغيير |
+|---|---|
+| `context/SettingsContext.tsx` | إضافة DefaultTab، defaultTab، setDefaultTab |
+| `app/(tabs)/_layout.tsx` | initialRouteName={defaultTab} |
+| `app/(tabs)/index.tsx` | قفل شفت الجمعة دائماً |
+| `app/settings.tsx` | قسم "الصفحة الرئيسية" + DefaultTab |
+| `constants/changelog.ts` | CURRENT_VERSION = '2.9.3' + entry |
+| `app.json` | version 2.9.3 |
+
+### EAS Build v2.9.3:
+- **Build ID:** `c9f8cde6-7b4a-44c5-add7-56e3306ef663`
+- **URL:** https://expo.dev/accounts/amr9925487962/projects/attendance/builds/c9f8cde6-7b4a-44c5-add7-56e3306ef663
+- **Status:** submitted ✅
+
+### طريقة البناء المحدَّثة (حل مشكلة catalog:):
+```bash
+# npm install يفشل مع catalog: من package.json الخاص بـ pnpm workspace
+# الحل: استخدم مجلد عزل نظيف أولاً
+rm -rf /tmp/expo-deps && mkdir -p /tmp/expo-deps
+cat > /tmp/expo-deps/package.json << 'EOF'
+{
+  "name": "expo-deps-installer",
+  "version": "1.0.0",
+  "dependencies": {
+    "expo": "54.0.27",
+    "expo-router": "6.0.17",
+    "expo-font": "14.0.10",
+    "expo-web-browser": "15.0.10",
+    "onesignal-expo-plugin": "2.7.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "eas-cli": "16.0.0"
+  }
+}
+EOF
+cd /tmp/expo-deps && npm install --legacy-peer-deps --no-optional --ignore-scripts
+
+# نقل node_modules للمشروع
+rm -rf /tmp/eas-build/artifacts/attendance/node_modules
+cp -r /tmp/expo-deps/node_modules /tmp/eas-build/artifacts/attendance/
+
+# تشغيل البناء
+cd /tmp/eas-build/artifacts/attendance
+EAS_SKIP_AUTO_FINGERPRINT=1 EXPO_TOKEN=$EXPO_TOKEN \
+  ./node_modules/.bin/eas build \
+  --platform android --profile preview --non-interactive --no-wait
+```
