@@ -232,6 +232,17 @@ export default function RootLayout() {
   // ── Cold-start initialization ─────────────────────────────────────────────
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
+
+    // ── Safety net: no matter what, hide the splash within 5 s ──────────────
+    let splashHidden = false;
+    const forceShowApp = () => {
+      if (splashHidden) return;
+      splashHidden = true;
+      setLockChecked(true);
+      SplashScreen.hideAsync().catch(() => {});
+    };
+    const safetyTimer = setTimeout(forceShowApp, 5000);
+
     (async () => {
       // 0. OneSignal — داخل useEffect بعد تحميل React Native
       if (Platform.OS !== 'web') {
@@ -249,24 +260,28 @@ export default function RootLayout() {
         } catch {}
       }
 
-      // 2. Check lock
+      // 2. Check lock ← wrapped in try/catch: فشل أي await هنا لن يوقف التطبيق
       if (Platform.OS !== 'web') {
-        const bioEnabled = await AsyncStorage.getItem(BIOMETRIC_KEY);
-        const pinEnabled = await isPINEnabled();
-        const hasBio = await LocalAuthentication.hasHardwareAsync();
-        const enrolled = await LocalAuthentication.isEnrolledAsync();
-        if (bioEnabled === '1' && hasBio && enrolled) {
-          setLockType('biometric');
-          setLocked(true);
-        } else if (pinEnabled) {
-          setLockType('pin');
-          setLocked(true);
-        }
+        try {
+          const bioEnabled = await AsyncStorage.getItem(BIOMETRIC_KEY);
+          const pinEnabled = await isPINEnabled();
+          const hasBio = await LocalAuthentication.hasHardwareAsync();
+          const enrolled = await LocalAuthentication.isEnrolledAsync();
+          if (bioEnabled === '1' && hasBio && enrolled) {
+            setLockType('biometric');
+            setLocked(true);
+          } else if (pinEnabled) {
+            setLockType('pin');
+            setLocked(true);
+          }
+        } catch {}
       }
       setLockChecked(true);
 
-      // 3. Unhide splash screen
-      SplashScreen.hideAsync();
+      // 3. Unhide splash screen — مضمونة الاستدعاء الآن
+      clearTimeout(safetyTimer);
+      splashHidden = true;
+      SplashScreen.hideAsync().catch(() => {});
 
       // 4. Daily backup
       try { await runDailyBackupIfNeeded(AsyncStorage); } catch {}
@@ -325,9 +340,13 @@ export default function RootLayout() {
           if (info) { setUpdateInfo(info); setShowUpdateModal(true); }
         }).catch(() => {});
       }
-    })();
+    })().catch(() => {
+      // ── Fallback: ضمان عدم بقاء المستخدم محاصراً على splash ──────────────
+      forceShowApp();
+    });
 
     return () => {
+      clearTimeout(safetyTimer);
       if (stableTimerRef.current) clearTimeout(stableTimerRef.current);
     };
   }, [fontsLoaded, fontError]);
