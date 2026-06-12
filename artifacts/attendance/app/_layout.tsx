@@ -33,6 +33,7 @@ import { initDatabase, getAllDates } from "@/utils/database";
 import { onAppStarting, onAppStable, clearCurrentUpdateBadFlag } from "@/utils/crashGuard";
 import { setupNotificationHandler } from "@/utils/notifications";
 import { checkForAppUpdate, type AppUpdateInfo } from "@/utils/easUpdateChecker";
+import { initOneSignal } from "@/utils/oneSignalService";
 
 SplashScreen.preventAutoHideAsync();
 setupNotificationHandler();

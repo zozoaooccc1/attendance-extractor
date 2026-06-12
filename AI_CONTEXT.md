@@ -684,3 +684,31 @@ import * as Updates from 'expo-updates'; // سطر 14
 ### الملف المُصلَح:
 - `artifacts/attendance/app/settings.tsx`
 
+---
+
+## 2026-06-12 — إصلاح خطأ TypeScript + EAS Build 2.9.0
+
+### المشكلة:
+```
+app/_layout.tsx(39,1): error TS2304: Cannot find name 'initOneSignal'.
+```
+`initOneSignal()` كانت مستدعاة في `_layout.tsx` لكن **import مفقود**.
+
+### الحل:
+أُضيف السطر التالي في `app/_layout.tsx` (بعد import easUpdateChecker):
+```typescript
+import { initOneSignal } from "@/utils/oneSignalService";
+```
+
+### الملف المُصلَح:
+- `artifacts/attendance/app/_layout.tsx` — سطر 39
+
+### EAS Build 2.9.0:
+- **Build ID:** `19b7c518-650b-4ee9-b93f-d84add3fa870`
+- **URL:** https://expo.dev/accounts/amr9925487962/projects/attendance/builds/19b7c518-650b-4ee9-b93f-d84add3fa870
+- **Profile:** preview (APK مباشر)
+- **Status:** submitted ✅ — يبني في سحابة Expo
+
+### ملاحظة EAS:
+ظهر تحذير `"expo-updates" package hasn't been installed` — هذا متوقع ومقصود لأننا حذفنا OTA. التحذير لا يؤثر على البناء.
+
