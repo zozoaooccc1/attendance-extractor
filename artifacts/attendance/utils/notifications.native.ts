@@ -1,9 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// ── Handler setup ────────────────────────────────────────────────────────────
-// Called at app startup AND when permissions are granted to ensure
-// foreground notifications always display.
+// ── Handler setup ─────────────────────────────────────────────────────────────
 let _handlerRegistered = false;
 
 export function setupNotificationHandler(): void {
@@ -18,15 +16,12 @@ export function setupNotificationHandler(): void {
       }),
     });
     _handlerRegistered = true;
-  } catch {
-    // Retry will happen next call
-  }
+  } catch {}
 }
 
-// Register handler immediately at module load
 setupNotificationHandler();
 
-// ── Android channels ─────────────────────────────────────────────────────────
+// ── Android channels ──────────────────────────────────────────────────────────
 async function ensureChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
@@ -44,14 +39,25 @@ async function ensureChannels(): Promise<void> {
       vibrationPattern: [0, 500, 250, 500],
       lightColor: '#ef4444',
     });
+    // ── NEW: alarm channel for 5-second burst ──────────────────────────────
+    await Notifications.setNotificationChannelAsync('attendance-alarm', {
+      name: '🚨 منبّه الدوام',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
+      vibrationPattern: [0, 800, 200, 800, 200, 800],
+      lightColor: '#f97316',
+      enableLights: true,
+      enableVibrate: true,
+      bypassDnd: true,        // يتجاوز وضع "عدم الإزعاج"
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
   } catch {}
 }
 
-// ── Permission request ────────────────────────────────────────────────────────
+// ── Permission request ─────────────────────────────────────────────────────────
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
   try {
-    // Ensure handler and channels are ready before granting permissions
     setupNotificationHandler();
     await ensureChannels();
     const { status: existing } = await Notifications.getPermissionsAsync();
@@ -65,15 +71,102 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   }
 }
 
-// ── Cancel all ───────────────────────────────────────────────────────────────
+// ── Cancel all ────────────────────────────────────────────────────────────────
 export async function cancelAllAttendanceReminders(): Promise<void> {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch {}
 }
 
-// ── Single shift reminders ───────────────────────────────────────────────────
-// Single shift: entry at 12:00, grace 12:15, exit at midnight (00:00)
+// ── Helper: schedule a burst of alarms every 5s (Android) / 30s (iOS) ────────
+// Fires one notification per interval for 15 minutes before the given time
+async function scheduleAlarmWindow(
+  entryHour: number,
+  entryMinute: number,
+  shiftLabel: string,
+): Promise<void> {
+  const INTERVAL_ANDROID = 5;   // seconds between each alarm on Android
+  const INTERVAL_IOS     = 30;  // iOS: max 64 pending notifications so use 30s
+  const WINDOW_SECONDS   = 15 * 60; // 15 minutes
+
+  const interval = Platform.OS === 'android' ? INTERVAL_ANDROID : INTERVAL_IOS;
+  const count = Math.floor(WINDOW_SECONDS / interval); // 180 or 30
+
+  const alarmChannel = Platform.OS === 'android' ? 'attendance-alarm' : undefined;
+
+  const now = new Date();
+  // Today's entry time
+  const todayEntry = new Date(
+    now.getFullYear(), now.getMonth(), now.getDate(),
+    entryHour, entryMinute, 0, 0,
+  );
+
+  // Window start = entry - 15min
+  const windowStart = new Date(todayEntry.getTime() - WINDOW_SECONDS * 1000);
+
+  // If entire window already passed today → schedule for tomorrow
+  const baseDate = windowStart.getTime() < now.getTime() - WINDOW_SECONDS * 1000
+    ? new Date(windowStart.getTime() + 24 * 60 * 60 * 1000) // tomorrow
+    : windowStart;
+
+  const batch: Promise<string>[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const fireTime = new Date(baseDate.getTime() + i * interval * 1000);
+    if (fireTime.getTime() <= now.getTime()) continue; // skip past times
+
+    const remainingMinutes = Math.ceil((todayEntry.getTime() - fireTime.getTime()) / 60000);
+    const remainStr = remainingMinutes <= 1 ? 'دقيقة واحدة' : `${remainingMinutes} دقيقة`;
+
+    batch.push(
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: `⏰ ${shiftLabel}`,
+          body: `باقي ${remainStr} على موعد الدخول — استعد!`,
+          sound: true,
+          ...(alarmChannel ? { android: { channelId: alarmChannel } } : {}),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: fireTime,
+        },
+      }).catch(() => ''),
+    );
+
+    // Schedule in micro-batches to avoid blocking
+    if (batch.length >= 30) {
+      await Promise.all(batch.splice(0, 30));
+    }
+  }
+
+  if (batch.length > 0) await Promise.all(batch);
+}
+
+// ── PUBLIC: schedule aggressive alarm burst before shift ──────────────────────
+// Called when "المنبّه الصاخب" is enabled in settings
+export async function scheduleAlarmBurst(
+  shiftType: 'single' | 'double',
+): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    setupNotificationHandler();
+    await ensureChannels();
+    await cancelAllAttendanceReminders();
+
+    if (shiftType === 'single') {
+      // Single shift entry: 12:00
+      await scheduleAlarmWindow(12, 0, 'موعد بصمة الدخول');
+    } else {
+      // Double shift entry1: 9:00, entry2: 16:00
+      await scheduleAlarmWindow(9,  0, 'دخول الشفت الأول');
+      await scheduleAlarmWindow(16, 0, 'دخول الشفت الثاني');
+    }
+  } catch (err) {
+    console.warn('[Notifications] scheduleAlarmBurst error:', err);
+  }
+}
+
+// ── Single shift normal reminders ─────────────────────────────────────────────
 export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
@@ -82,12 +175,10 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
     await cancelAllAttendanceReminders();
 
     const early = Math.max(0, Math.min(earlyMinutes, 30));
-    const channel = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
-    const urgentChannel = Platform.OS === 'android' ? 'attendance-urgent' : undefined;
+    const channel        = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
+    const urgentChannel  = Platform.OS === 'android' ? 'attendance-urgent'    : undefined;
 
-    // Entry reminder (adjustable early minutes before 12:00)
-    const entryHour = 11;
-    const entryMin = 60 - early; // e.g. early=15 → 11:45
+    // Entry reminder (adjustable)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🕐 موعد بصمة الدخول',
@@ -99,12 +190,12 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour: early > 0 ? entryHour : 12,
-        minute: early > 0 ? entryMin % 60 : 0,
+        hour: early > 0 ? 11 : 12,
+        minute: early > 0 ? 60 - early : 0,
       },
     });
 
-    // Grace limit warning (12:15)
+    // Grace limit warning (12:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '⚠️ آخر موعد للبصمة',
@@ -119,7 +210,7 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Exit reminder (midnight = next day 00:00, schedule at 23:45)
+    // Exit reminder (23:45)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌙 موعد بصمة الخروج',
@@ -138,8 +229,7 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
   }
 }
 
-// ── Double shift reminders ───────────────────────────────────────────────────
-// Double: entry1 9:00, grace1 9:15, exit1 12:00, entry2 16:00, grace2 16:15, exit2 00:00
+// ── Double shift normal reminders ─────────────────────────────────────────────
 export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
@@ -148,12 +238,10 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
     await cancelAllAttendanceReminders();
 
     const early = Math.max(0, Math.min(earlyMinutes, 30));
-    const channel = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
-    const urgentChannel = Platform.OS === 'android' ? 'attendance-urgent' : undefined;
+    const channel        = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
+    const urgentChannel  = Platform.OS === 'android' ? 'attendance-urgent'    : undefined;
 
-    // Entry1 reminder (before 09:00)
-    const e1Hour = early > 0 ? 8 : 9;
-    const e1Min  = early > 0 ? 60 - early : 0;
+    // Entry1 (09:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌅 موعد دخول الشفت الأول',
@@ -165,12 +253,11 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour: e1Hour,
-        minute: e1Min % 60,
+        hour: early > 0 ? 8 : 9,
+        minute: early > 0 ? 60 - early : 0,
       },
     });
 
-    // Grace1 warning (09:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '⚠️ آخر موعد — الشفت الأول',
@@ -185,7 +272,7 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Exit1 reminder (11:45)
+    // Exit1 (11:45)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🔔 موعد خروج الشفت الأول',
@@ -200,9 +287,7 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Entry2 reminder (before 16:00)
-    const e2Hour = early > 0 ? 15 : 16;
-    const e2Min  = early > 0 ? 60 - early : 0;
+    // Entry2 (16:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌆 موعد دخول الشفت الثاني',
@@ -214,12 +299,11 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour: e2Hour,
-        minute: e2Min % 60,
+        hour: early > 0 ? 15 : 16,
+        minute: early > 0 ? 60 - early : 0,
       },
     });
 
-    // Grace2 warning (16:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '⚠️ آخر موعد — الشفت الثاني',
@@ -234,7 +318,7 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Exit2 reminder (23:45)
+    // Exit2 (23:45)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌙 نهاية الدوام — الشفت الثاني',
@@ -253,7 +337,7 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
   }
 }
 
-// ── Persistent reminder (every X hours) ─────────────────────────────────────
+// ── Persistent reminder (every X hours) ──────────────────────────────────────
 export async function schedulePersistentReminders(intervalHours = 2): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
@@ -278,7 +362,7 @@ export async function schedulePersistentReminders(intervalHours = 2): Promise<vo
   }
 }
 
-// ── Immediate test alert ─────────────────────────────────────────────────────
+// ── Immediate test alert ──────────────────────────────────────────────────────
 export async function sendImmediateAlert(title: string, body: string): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
