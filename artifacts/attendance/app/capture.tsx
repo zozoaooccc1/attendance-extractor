@@ -23,14 +23,6 @@ import { moderateScale, clampFont, spacing, buildFontSize } from '@/utils/respon
 const CAMERA_GUIDE_KEY = 'attendance_camera_guide_v1';
 const MIN_IMAGE_SIZE_BYTES = 15000;
 
-// ── عنوان api-server (يُقرأ من متغير البيئة أو يُستنتج) ─────────────────────
-function getApiBaseUrl(): string {
-  const envUrl = (typeof process !== 'undefined' && (process.env as any)['EXPO_PUBLIC_API_URL']) as string | undefined;
-  if (envUrl) return envUrl.replace(/\/$/, '');
-  // في بيئة Replit — المسار النسبي عبر الـ proxy
-  return '';
-}
-
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
@@ -96,10 +88,6 @@ export default function CaptureScreen() {
   const [showCameraGuide, setShowCameraGuide] = useState(false);
   const [note, setNote]                 = useState('');
 
-  // AI Scanner
-  const [aiScanning, setAiScanning]           = useState(false);
-  const [aiSuggestedTime, setAiSuggestedTime] = useState<string | null>(null);
-  const [aiError, setAiError]                 = useState<string | null>(null);
 
   const progressRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const successOpacity = useRef(new Animated.Value(0)).current;
@@ -144,8 +132,6 @@ export default function CaptureScreen() {
 
   const continueWithImage = async (uri: string) => {
     setImageUri(uri);
-    setAiSuggestedTime(null);
-    setAiError(null);
     setStep('fetching');
     const officialT = await getOfficialTime(3000);
     setOfficialTime(officialT);
@@ -184,42 +170,7 @@ export default function CaptureScreen() {
     } catch { Alert.alert(t.error, t.capture.cameraError); router.back(); }
   };
 
-  // ── الكشّاف الذكي (AI) ────────────────────────────────────────────────────
-  const handleAiScan = async () => {
-    if (!imageUri) return;
-    setAiScanning(true);
-    setAiError(null);
-    setAiSuggestedTime(null);
-    try {
-      // قراءة الصورة كـ base64
-      let base64: string | null = null;
-      try {
-        base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
-      } catch {}
-      if (!base64 || base64.length < 100) throw new Error('تعذّر قراءة الصورة');
 
-      // إرسال إلى نقطة API
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/api/ai-scan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64 }),
-      });
-
-      if (!res.ok) throw new Error(`خطأ في الخادم: ${res.status}`);
-      const data = await res.json() as { time?: string; error?: string };
-
-      if (data.time) {
-        setAiSuggestedTime(data.time);
-      } else {
-        throw new Error(data.error ?? 'لم يتعرف الذكاء الاصطناعي على الوقت');
-      }
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'خطأ في تحليل الصورة');
-    } finally {
-      setAiScanning(false);
-    }
-  };
 
   const handleConfirm = async () => {
     if (!imageUri || !officialTime) return;
@@ -233,13 +184,12 @@ export default function CaptureScreen() {
       const rawType = Array.isArray(type) ? type[0] : (type as string);
       const resolvedType: RecordType = (rawType === 'entry1' || rawType === 'exit1' || rawType === 'entry2' || rawType === 'exit2') ? rawType as RecordType : 'entry1';
 
-      // استخدم الوقت المقترح من AI إن تم اعتماده، وإلا الوقت الرسمي
-      const finalTime = aiSuggestedTime ?? officialTime.displayTime;
+      const finalTime = officialTime.displayTime;
 
       addRecord({
         id, date: officialTime.displayDate, type: resolvedType, shiftType: resolvedShift,
-        imagePath: savedPath, ocrTime: officialTime.displayTime, ocrConfidence: aiSuggestedTime ? 90 : 100,
-        confirmedTime: finalTime, isManuallyEdited: !!aiSuggestedTime,
+        imagePath: savedPath, ocrTime: officialTime.displayTime, ocrConfidence: 100,
+        confirmedTime: finalTime, isManuallyEdited: false,
         isSynced: officialTime.isSynced, createdAt: officialTime.time instanceof Date ? officialTime.time.getTime() : Number(officialTime.time),
         note: note.trim() || undefined,
       });
@@ -363,59 +313,6 @@ export default function CaptureScreen() {
         )}
       </View>
 
-      {/* ── الكشّاف الذكي (AI) ───────────────────────────────────────────────── */}
-      <View style={[styles.aiCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <Ionicons name="sparkles-outline" size={moderateScale(17)} color="#8b5cf6" />
-          <Text style={{ color: colors.foreground, fontSize: moderateScale(14), fontFamily: 'Inter_600SemiBold' }}>
-            الكشّاف الذكي (AI)
-          </Text>
-          <View style={{ flex: 1 }} />
-          {aiSuggestedTime && (
-            <TouchableOpacity onPress={() => { setAiSuggestedTime(null); setAiError(null); }}>
-              <Ionicons name="close-circle" size={moderateScale(16)} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {aiSuggestedTime ? (
-          <View style={{ gap: 8 }}>
-            <View style={{ backgroundColor: '#8b5cf620', borderRadius: 10, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="checkmark-circle" size={moderateScale(18)} color="#8b5cf6" />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#8b5cf6', fontSize: 12, fontFamily: 'Inter_400Regular' }}>الوقت المستخرج من الصورة</Text>
-                <Text style={{ color: colors.foreground, fontSize: moderateScale(20), fontFamily: 'Inter_700Bold' }}>{formatTime(aiSuggestedTime)}</Text>
-              </View>
-            </View>
-            <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'Inter_400Regular', textAlign: 'center' }}>
-              ✅ سيُحفظ السجل بهذا الوقت المستخرج من صورة الجهاز
-            </Text>
-          </View>
-        ) : (
-          <View style={{ gap: 8 }}>
-            <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: 'Inter_400Regular' }}>
-              يحلّل الذكاء الاصطناعي صورة جهاز البصمة ويستخرج الوقت المُعروض عليه تلقائياً
-            </Text>
-            {aiError && (
-              <View style={{ backgroundColor: '#ef444415', borderRadius: 8, padding: 8, flexDirection: 'row', gap: 6 }}>
-                <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
-                <Text style={{ color: '#ef4444', fontSize: 11, flex: 1, fontFamily: 'Inter_400Regular' }}>{aiError}</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[styles.aiBtn, { backgroundColor: '#8b5cf618', borderColor: '#8b5cf640' }, aiScanning && { opacity: 0.6 }]}
-              onPress={handleAiScan} disabled={aiScanning}
-            >
-              {aiScanning ? (
-                <><ActivityIndicator size="small" color="#8b5cf6" /><Text style={[styles.aiBtnText, { color: '#8b5cf6' }]}>جارٍ التحليل...</Text></>
-              ) : (
-                <><Ionicons name="sparkles-outline" size={moderateScale(16)} color="#8b5cf6" />
-                <Text style={[styles.aiBtnText, { color: '#8b5cf6' }]}>استخرج الوقت بـ AI</Text></>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
 
       {/* ── حقل الملاحظة ──────────────────────────────────────────────── */}
       <View style={[styles.noteCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -449,7 +346,7 @@ export default function CaptureScreen() {
 
       <TouchableOpacity
         style={[styles.retakeBtn, { borderColor: colors.border }]}
-        onPress={() => { setNote(''); setAiSuggestedTime(null); setAiError(null); setStep('camera'); launchCamera(); }}
+        onPress={() => { setNote(''); setStep('camera'); launchCamera(); }}
       >
         <Ionicons name="camera-outline" size={moderateScale(20)} color={colors.foreground} />
         <Text style={[styles.retakeText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>{t.capture.retake}</Text>
@@ -489,9 +386,7 @@ function createStyles(mul: number) {
     dateDisplay: { fontSize: fs.base, fontFamily: 'Inter_400Regular' },
     warnBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: moderateScale(10), borderWidth: 1, padding: moderateScale(10), gap: 8, marginTop: 4 },
     warnText: { flex: 1, fontSize: fs.xs, fontFamily: 'Inter_400Regular', lineHeight: moderateScale(17) },
-    aiCard: { borderRadius: moderateScale(16), borderWidth: 1, padding: moderateScale(14) },
-    aiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: moderateScale(12), paddingVertical: moderateScale(11) },
-    aiBtnText: { fontSize: fs.sm, fontFamily: 'Inter_600SemiBold' },
+
     noteCard: { borderRadius: moderateScale(16), borderWidth: 1, padding: moderateScale(14), gap: moderateScale(8) },
     noteLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     noteLabel: { fontSize: fs.sm },
