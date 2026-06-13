@@ -41,66 +41,42 @@ EAS Account: amr9925487962
 ## الإصلاحات المنجزة (v3.1.3)
 
 ### Bug 1 — حلقة كراش وهمية (crashGuard.ts) ✅
-**المشكلة**: `onAppStable()` كانت تكتب `Date.now()` جديد إلى `KEY_COMPLETED`، بينما `KEY_STARTED` له timestamp مختلف → لا يتطابقان أبداً → كل تشغيل يُعد كراشاً.
-
-**الحل**: `onAppStable()` الآن تقرأ قيمة `KEY_STARTED` وتكتب **نفس القيمة** إلى `KEY_COMPLETED`، فيصبحان متساويين في التشغيل التالي.
+**المشكلة**: `onAppStable()` تكتب `Date.now()` جديد → لا يتطابق مع `KEY_STARTED` → كل تشغيل يُعد كراشاً.
+**الحل**: `onAppStable()` تقرأ قيمة `KEY_STARTED` وتكتب **نفس القيمة** إلى `KEY_COMPLETED`.
 
 ### Bug 2 — AI Scan يرجع 403 ✅
-**المشكلة**: `EXPO_PUBLIC_API_URL` غير مُعيَّن في APK → `getApiBaseUrl()` يرجع `''` → Expo يحل الـ relative URL على `origin: "https://replit.com/"` → يرسل الطلب لـ replit.com → 403.
+**المشكلة**: `EXPO_PUBLIC_API_URL` غير مُعيَّن في APK → طلبات تذهب لـ replit.com → 403.
+**الحل**: أُضيف `EXPO_PUBLIC_API_URL` في جميع profiles في `eas.json`.
 
-**الحل**: أُضيف `EXPO_PUBLIC_API_URL` إلى جميع profiles في `eas.json` يشير إلى خادم Replit الحقيقي.
+## الإصلاحات المنجزة (v3.1.6) — جلسة 2026-06-13
 
-**ملاحظة**: يحتاج خادم الـ AI scan إلى `GEMINI_API_KEY` في env vars الخادم.
+### Bug 3 — كراش صفحة الموظف ✅
+**المشكلة**: `employee.tsx` يستخدم `t` دون استيراد `useLanguage` → ReferenceError عند فتح الصفحة.
+**الحل**: أُضيف `import { useLanguage }` و `const { t } = useLanguage()` داخل `EmployeeScreen`.
+**الملف**: `artifacts/attendance/app/(tabs)/employee.tsx`
+
+### Bug 4 — حلقة التنزيل المتكررة في نافذة التحديث ✅
+**المشكلة**: عند فشل `IntentLauncher.startActivityAsync` → catch يُعيّن phase='error' → المستخدم يضغط "إعادة المحاولة" → يُعيد التنزيل من الصفر رغم اكتمال التنزيل.
+**الحل**:
+1. فصل خطأ التنزيل عن خطأ التثبيت (`launchInstaller` منفصل).
+2. حفظ مسار الملف المُنزَّل في `localApkUri` state → عند الخطأ يُعيد فتح التثبيت بدون إعادة تنزيل.
+3. عند فشل `IntentLauncher` → يجرب `Sharing.shareAsync` كبديل تلقائي.
+4. زر "إعادة المحاولة" يُميّز بين: فتح التثبيت مجدداً أو إعادة التنزيل الكامل.
+**الملف**: `artifacts/attendance/components/AppUpdateModal.tsx`
 
 ## أوامر مفيدة
 ```bash
-# بناء APK (preview)
-cd /tmp/attendance && \
-  EXPO_TOKEN=$(printenv EXPO_TOKEN) \
-  EAS_DANGEROUS_DISABLE_VCS_OVERRIDE=1 \
-  npx eas-cli build --platform android --profile preview --non-interactive --no-wait
-
-# تحديث AI_CONTEXT.md على GitHub
-curl -X PUT -H "Authorization: token $GITHUB_TOKEN" ...
+# بناء APK (preview) — من داخل مجلد attendance مع git مُهيَّأ
+EXPO_TOKEN=$(printenv EXPO_TOKEN) \
+EAS_DANGEROUS_DISABLE_VCS_OVERRIDE=1 \
+npx eas-cli build --platform android --profile preview --non-interactive --no-wait
 ```
 
 ## Replit Dev Domain
 `47eaabd4-5226-4cf2-9645-0069fe462693-00-1830rv7d5wjt2.sisko.replit.dev`
 
-## التغييرات المنجزة (v3.1.4) — جلسة 2026-06-13
-
-### 1. إزالة AI Scan من capture.tsx
-حُذف زر AI scan كاملاً (state, handleAiScan, UI card, styles). الوقت الرسمي يُستخدم مباشرةً.
-
-### 2. دعم الإنجليزية لصفحة الموظف
-أُضيف قسم employee إلى i18n/index.ts (ar+en). employee.tsx يستخدم t.employee.*
-
-### 3. تغيير اسم الفترة
-فترة الشركة → فترة دوام الشركة في: i18n (today+reports, ar+en) + reports.tsx (3 مواضع)
-
-### 4. المنبّه الصاخب — عودة لنظام الشفت
-scheduleAlarmBurst(shiftType): single→12:00 فقط، double→9:00+16:00 فقط. settings.tsx يمرر notifShift.
-
-### 5. إصلاح شريط الخط RTL
-FontSlider في settings.tsx: isRTL prop جديد. toPercent يعكس الإحداثي عند RTL.
-
-### 6. إزالة اختيار الصفحة الرئيسية
-SettingsContext: حُذف defaultTab/setDefaultTab. settings.tsx: حُذف GROUP الصفحة الرئيسية. _layout.tsx: initialRouteName=employee مثبّت.
-
-### 7. إصلاح توقيت الخروج
-getEarliestExitCapture يرجع exitTime مباشرةً (بدون -15دق). رسالة index.tsx تعكس القاعدة الجديدة.
-
-## التغييرات المنجزة (v3.1.6) — جلسة 2026-06-13
-
-### Bug 3 — كراش صفحة الموظف ✅
-**المشكلة**: `employee.tsx` يستخدم المتغير `t` في كل مكان (t.employee.title, t.settings.singleShift...) دون استيراد `useLanguage` → ReferenceError عند فتح الصفحة → كراش فوري.
-
-**الحل**: أُضيف `import { useLanguage } from '@/context/LanguageContext'` و `const { t } = useLanguage()` داخل `EmployeeScreen`.
-
-**الملف المتأثر**: `artifacts/attendance/app/(tabs)/employee.tsx`
-
 ## Version Bumps
-- v3.1.3: versionCode 35 — commit: 32b1fbfdca368d7f1184a80a0d046330cdcc5899
-- v3.1.4: versionCode 36 — commit: 32b1fbfdca368d7f1184a80a0d046330cdcc5899
-- v3.1.5: versionCode 37 — commit: 7ba488a
-- v3.1.6: versionCode 38 — إصلاح كراش صفحة الموظف
+- v3.1.3: versionCode 35
+- v3.1.4: versionCode 36
+- v3.1.5: versionCode 37
+- v3.1.6: versionCode 38 — إصلاح كراش الموظف + حلقة التحديث
