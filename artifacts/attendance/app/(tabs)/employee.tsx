@@ -69,19 +69,27 @@ export default function EmployeeScreen() {
 
   // ── Calculate late/bonus minutes for current month ─────────────────────────
   const { lateMinutes } = useMemo(() => {
-    const now = new Date();
-    const records = getRecordForMonth(now.getFullYear(), now.getMonth() + 1);
-    let late = 0;
-    for (const r of records) {
-      if (r.type !== 'entry1' && r.type !== 'entry2') continue;
-      const recordDate = new Date(r.createdAt);
-      const scheduled = getScheduledEntryMinutes(r.type, r.shiftType, recordDate);
-      const [h, m] = r.confirmedTime.split(':').map(Number);
-      const actualMins = h * 60 + m;
-      const diff = actualMins - scheduled;
-      if (diff > 0) late += diff;
+    try {
+      const now = new Date();
+      const records = getRecordForMonth(now.getFullYear(), now.getMonth() + 1);
+      let late = 0;
+      for (const r of records) {
+        if (r.type !== 'entry1' && r.type !== 'entry2') continue;
+        if (!r.confirmedTime || !r.confirmedTime.includes(':')) continue;
+        if (!r.shiftType) continue;
+        const recordDate = new Date(r.createdAt);
+        if (isNaN(recordDate.getTime())) continue;
+        const scheduled = getScheduledEntryMinutes(r.type, r.shiftType, recordDate);
+        const [h, m] = r.confirmedTime.split(':').map(Number);
+        if (isNaN(h) || isNaN(m)) continue;
+        const actualMins = h * 60 + m;
+        const diff = actualMins - scheduled;
+        if (diff > 0) late += diff;
+      }
+      return { lateMinutes: late };
+    } catch {
+      return { lateMinutes: 0 };
     }
-    return { lateMinutes: late };
   }, [todayRecords, getRecordForMonth]);
 
   const handleShiftChange = (shift: ShiftType) => {
