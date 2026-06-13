@@ -78,9 +78,8 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
           flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
           type: 'application/vnd.android.package-archive',
         });
-        // عُد للوضع الطبيعي — لا تغلق النافذة تلقائياً
-        // يمكن للمستخدم إعادة التثبيت أو إغلاق النافذة يدوياً
-        setPhase('idle');
+        // أغلق المودال فور ظهور نافذة التثبيت — يمنع تكرار ظهور زر التثبيت
+        onDismiss();
       } else {
         // iOS: افتح الرابط في المتصفح
         await Linking.openURL(info.downloadUrl);
