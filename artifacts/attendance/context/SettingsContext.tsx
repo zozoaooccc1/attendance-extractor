@@ -26,8 +26,7 @@ interface SettingsContextType {
   setLanguage: (l: Language) => void;
   t: AppTranslations;
   isRTL: boolean;
-  defaultTab: DefaultTab;
-  setDefaultTab: (tab: DefaultTab) => void;
+
   maxStorageMB: number;
   setMaxStorageMB: (mb: number) => void;
   settingsLoaded: boolean;
@@ -51,7 +50,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [earlyReminder,    setER]  = useState(false);
   const [alarmBeforeShift, setABS] = useState(false);
   const [language,         setLang] = useState<Language>('ar');
-  const [defaultTab,       setDT]  = useState<DefaultTab>('index');
+
   const [maxStorageMB,     setMSMB] = useState<number>(1000);
   const [settingsLoaded,   setSL]  = useState(false);
 
@@ -72,7 +71,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           if (typeof s.highContrast     === 'boolean') setHC(s.highContrast);
           if (typeof s.earlyReminder    === 'boolean') setER(s.earlyReminder);
           if (typeof s.alarmBeforeShift === 'boolean') setABS(s.alarmBeforeShift);
-          if (s.defaultTab) setDT(s.defaultTab as DefaultTab);
+
           if (typeof s.maxStorageMB     === 'number')  setMSMB(s.maxStorageMB);
         } catch {}
       }
@@ -104,7 +103,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setEarlyReminder    = useCallback((v: boolean) => { setER(v);   persist({ earlyReminder: v });    }, [persist]);
   const setAlarmBeforeShift = useCallback((v: boolean) => { setABS(v);  persist({ alarmBeforeShift: v }); }, [persist]);
   const setLanguage         = useCallback((l: Language) => { setLang(l); AsyncStorage.setItem(LANG_KEY, l); }, []);
-  const setDefaultTab       = useCallback((tab: DefaultTab) => { setDT(tab); persist({ defaultTab: tab }); }, [persist]);
+
   const setMaxStorageMB     = useCallback((mb: number) => { setMSMB(mb); persist({ maxStorageMB: mb }); }, [persist]);
 
   const t = translations[language];
@@ -131,7 +130,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       alarmBeforeShift, setAlarmBeforeShift,
       formatTime, fontMultiplier,
       language, setLanguage, t, isRTL,
-      defaultTab, setDefaultTab,
+
       maxStorageMB, setMaxStorageMB,
       settingsLoaded,
     }}>
