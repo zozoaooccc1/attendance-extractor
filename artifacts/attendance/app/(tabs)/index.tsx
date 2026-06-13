@@ -174,7 +174,7 @@ export default function TodayScreen() {
         const allowedFrom = formatTimeHHMM(earliest);
         Alert.alert(
           '⏰ مبكر جداً',
-          `لا يمكن تسجيل الخروج الآن.\n\nيُسمح بالتصوير قبل انتهاء الدوام بـ 15 دقيقة فقط.\n\n✅ الوقت المسموح من: ${allowedFrom}\n⏳ الوقت المتبقي: ${diffMin} دقيقة`
+          `لا يمكن تسجيل الخروج قبل انتهاء الدوام.\n\n✅ يُسمح بالتصوير اعتباراً من: ${allowedFrom}\n⏳ الوقت المتبقي: ${diffMin} دقيقة`
         );
         return;
       }
