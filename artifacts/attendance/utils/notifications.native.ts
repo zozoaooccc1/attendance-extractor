@@ -39,7 +39,6 @@ async function ensureChannels(): Promise<void> {
       vibrationPattern: [0, 500, 250, 500],
       lightColor: '#ef4444',
     });
-    // ── NEW: alarm channel for 5-second burst ──────────────────────────────
     await Notifications.setNotificationChannelAsync('attendance-alarm', {
       name: '🚨 منبّه الدوام',
       importance: Notifications.AndroidImportance.MAX,
@@ -48,7 +47,7 @@ async function ensureChannels(): Promise<void> {
       lightColor: '#f97316',
       enableLights: true,
       enableVibrate: true,
-      bypassDnd: true,        // يتجاوز وضع "عدم الإزعاج"
+      bypassDnd: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   } catch {}
@@ -78,44 +77,39 @@ export async function cancelAllAttendanceReminders(): Promise<void> {
   } catch {}
 }
 
-// ── Helper: schedule a burst of alarms every 5s (Android) / 30s (iOS) ────────
-// Fires one notification per interval for 15 minutes before the given time
-async function scheduleAlarmWindow(
+// ── Helper: schedule alarm burst for ONE specific date ────────────────────────
+// Fires every INTERVAL seconds within the 15-minute window before entryHour:entryMinute
+async function scheduleAlarmWindowForDate(
+  targetDate: Date,
   entryHour: number,
   entryMinute: number,
   shiftLabel: string,
 ): Promise<void> {
-  const INTERVAL_ANDROID = 5;   // seconds between each alarm on Android
-  const INTERVAL_IOS     = 30;  // iOS: max 64 pending notifications so use 30s
-  const WINDOW_SECONDS   = 15 * 60; // 15 minutes
+  // Android: 30s intervals (30 per window) | iOS: 120s intervals (7 per window)
+  const INTERVAL_S     = Platform.OS === 'android' ? 30 : 120;
+  const WINDOW_SECONDS = 15 * 60; // 15 minutes
 
-  const interval = Platform.OS === 'android' ? INTERVAL_ANDROID : INTERVAL_IOS;
-  const count = Math.floor(WINDOW_SECONDS / interval); // 180 or 30
-
+  const count = Math.floor(WINDOW_SECONDS / INTERVAL_S);
   const alarmChannel = Platform.OS === 'android' ? 'attendance-alarm' : undefined;
 
   const now = new Date();
-  // Today's entry time
-  const todayEntry = new Date(
-    now.getFullYear(), now.getMonth(), now.getDate(),
+
+  const entryTime = new Date(
+    targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(),
     entryHour, entryMinute, 0, 0,
   );
+  const windowStart = new Date(entryTime.getTime() - WINDOW_SECONDS * 1000);
 
-  // Window start = entry - 15min
-  const windowStart = new Date(todayEntry.getTime() - WINDOW_SECONDS * 1000);
-
-  // If entire window already passed today → schedule for tomorrow
-  const baseDate = windowStart.getTime() < now.getTime() - WINDOW_SECONDS * 1000
-    ? new Date(windowStart.getTime() + 24 * 60 * 60 * 1000) // tomorrow
-    : windowStart;
+  // Skip if the entire window + entry have already passed
+  if (entryTime.getTime() <= now.getTime()) return;
 
   const batch: Promise<string>[] = [];
 
   for (let i = 0; i < count; i++) {
-    const fireTime = new Date(baseDate.getTime() + i * interval * 1000);
-    if (fireTime.getTime() <= now.getTime()) continue; // skip past times
+    const fireTime = new Date(windowStart.getTime() + i * INTERVAL_S * 1000);
+    if (fireTime.getTime() <= now.getTime()) continue;
 
-    const remainingMinutes = Math.ceil((todayEntry.getTime() - fireTime.getTime()) / 60000);
+    const remainingMinutes = Math.ceil((entryTime.getTime() - fireTime.getTime()) / 60000);
     const remainStr = remainingMinutes <= 1 ? 'دقيقة واحدة' : `${remainingMinutes} دقيقة`;
 
     batch.push(
@@ -133,9 +127,8 @@ async function scheduleAlarmWindow(
       }).catch(() => ''),
     );
 
-    // Schedule in micro-batches to avoid blocking
-    if (batch.length >= 30) {
-      await Promise.all(batch.splice(0, 30));
+    if (batch.length >= 20) {
+      await Promise.all(batch.splice(0, 20));
     }
   }
 
@@ -143,7 +136,7 @@ async function scheduleAlarmWindow(
 }
 
 // ── PUBLIC: schedule aggressive alarm burst before shift entry ────────────────
-// Called when "المنبّه الصاخب" is enabled in settings
+// Schedules for the next 7 days (Android) / 4 days (iOS) so alarms repeat daily
 export async function scheduleAlarmBurst(
   shiftType: 'single' | 'double',
 ): Promise<void> {
@@ -153,13 +146,24 @@ export async function scheduleAlarmBurst(
     await ensureChannels();
     await cancelAllAttendanceReminders();
 
-    if (shiftType === 'single') {
-      // Single shift entry: 12:00
-      await scheduleAlarmWindow(12, 0, 'موعد بصمة الدخول');
-    } else {
-      // Double shift entry1: 9:00, entry2: 16:00
-      await scheduleAlarmWindow(9,  0, 'دخول الشفت الأول');
-      await scheduleAlarmWindow(16, 0, 'دخول الشفت الثاني');
+    const now = new Date();
+    // Android: 7 days (30s interval × 30 = 210 notifs per entry)
+    // iOS: 4 days (120s interval × 7 = 28 notifs per entry) — stays under 64 limit
+    const DAYS = Platform.OS === 'android' ? 7 : 4;
+
+    for (let dayOffset = 0; dayOffset < DAYS; dayOffset++) {
+      const targetDate = new Date(
+        now.getFullYear(), now.getMonth(), now.getDate() + dayOffset,
+      );
+
+      if (shiftType === 'single') {
+        // Single shift entry: 12:00
+        await scheduleAlarmWindowForDate(targetDate, 12, 0, 'موعد بصمة الدخول');
+      } else {
+        // Double shift: entry1 09:00, entry2 16:00
+        await scheduleAlarmWindowForDate(targetDate, 9,  0, 'دخول الشفت الأول');
+        await scheduleAlarmWindowForDate(targetDate, 16, 0, 'دخول الشفت الثاني');
+      }
     }
   } catch (err) {
     console.warn('[Notifications] scheduleAlarmBurst error:', err);
@@ -178,7 +182,6 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
     const channel        = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
     const urgentChannel  = Platform.OS === 'android' ? 'attendance-urgent'    : undefined;
 
-    // Entry reminder (adjustable)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🕐 موعد بصمة الدخول',
@@ -195,7 +198,6 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Grace limit warning (12:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '⚠️ آخر موعد للبصمة',
@@ -210,7 +212,6 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Exit reminder (23:45)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌙 موعد بصمة الخروج',
@@ -241,7 +242,6 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
     const channel        = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
     const urgentChannel  = Platform.OS === 'android' ? 'attendance-urgent'    : undefined;
 
-    // Entry1 (09:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌅 موعد دخول الشفت الأول',
@@ -272,7 +272,6 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Exit1 (11:45)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🔔 موعد خروج الشفت الأول',
@@ -287,7 +286,6 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Entry2 (16:00)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌆 موعد دخول الشفت الثاني',
@@ -318,7 +316,6 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       },
     });
 
-    // Exit2 (23:45)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🌙 نهاية الدوام — الشفت الثاني',
