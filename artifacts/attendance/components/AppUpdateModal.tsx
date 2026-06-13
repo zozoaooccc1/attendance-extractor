@@ -17,7 +17,8 @@ const ITEM_META: Record<string, { icon: string; color: string; label: string }> 
   improve: { icon: 'trending-up-outline', color: '#60a5fa', label: 'تحسين'   },
 };
 
-type Phase = 'idle' | 'downloading' | 'ready' | 'installing' | 'error';
+// 'launched' = المثبّت فُتح بنجاح لكن المودال يبقى حتى يغلقه المستخدم يدوياً
+type Phase = 'idle' | 'downloading' | 'installing' | 'launched' | 'error';
 
 interface Props {
   visible: boolean;
@@ -26,16 +27,16 @@ interface Props {
 }
 
 export function AppUpdateModal({ visible, info, onDismiss }: Props) {
-  const [phase, setPhase]         = useState<Phase>('idle');
-  const [progress, setProgress]   = useState(0);
-  const [errorMsg, setErrorMsg]   = useState('');
+  const [phase, setPhase]             = useState<Phase>('idle');
+  const [progress, setProgress]       = useState(0);
+  const [errorMsg, setErrorMsg]       = useState('');
   const [localApkUri, setLocalApkUri] = useState<string | null>(null);
 
   if (!info) return null;
 
   const changelog: ChangelogItem | null = getVersionChangelog(info.version);
 
-  // ── فتح نافذة التثبيت (منفصل عن التنزيل) ───────────────────────────────────
+  // ── فتح نافذة التثبيت ────────────────────────────────────────────────────────
   const launchInstaller = async (fileUri: string) => {
     setPhase('installing');
     try {
@@ -46,13 +47,15 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
           flags: 1,
           type: 'application/vnd.android.package-archive',
         });
-        onDismiss();
+        // ✅ لا نغلق المودال تلقائياً — startActivityAsync تعود فور انبثاق المثبّت
+        // المودال يبقى مفتوحاً حتى يغلقه المستخدم بنفسه
+        setPhase('launched');
       } else {
         await Linking.openURL(info.downloadUrl);
-        setPhase('idle');
+        setPhase('launched');
       }
     } catch {
-      // المحاولة البديلة: مشاركة الملف مباشرة
+      // المحاولة البديلة: مشاركة الملف
       try {
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
@@ -60,7 +63,7 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
             mimeType: 'application/vnd.android.package-archive',
             dialogTitle: 'تثبيت تحديث التطبيق',
           });
-          onDismiss();
+          setPhase('launched');
         } else {
           throw new Error('sharing_unavailable');
         }
@@ -71,7 +74,7 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
     }
   };
 
-  // ── تحميل APK ثم تثبيته ────────────────────────────────────────────────────
+  // ── تحميل APK ثم تشغيل المثبّت ──────────────────────────────────────────────
   const handleInstall = async () => {
     if (Platform.OS === 'web') {
       try { await Linking.openURL(info.downloadUrl); } catch {}
@@ -79,7 +82,7 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
       return;
     }
 
-    // إذا كان الملف محمّلاً مسبقاً → لا نُعيد التنزيل
+    // إذا كان الملف محمّلاً → فتح المثبّت مباشرة
     if (localApkUri) {
       await launchInstaller(localApkUri);
       return;
@@ -91,7 +94,6 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
 
     try {
       const dest = (FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? '') + 'attendance_update.apk';
-
       try { await FileSystem.deleteAsync(dest, { idempotent: true }); } catch {}
 
       const task = FileSystem.createDownloadResumable(
@@ -108,7 +110,6 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
       const result = await task.downloadAsync();
       if (!result?.uri) throw new Error('no_uri');
 
-      // احفظ المسار المحلي للاستخدام عند إعادة المحاولة دون إعادة التنزيل
       setLocalApkUri(result.uri);
       await launchInstaller(result.uri);
 
@@ -126,15 +127,10 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
     onDismiss();
   };
 
-  const isDownloading  = phase === 'downloading';
-  const isInstalling   = phase === 'ready' || phase === 'installing';
-  const isActive       = isDownloading || isInstalling;
-
-  const installBtnLabel = localApkUri && phase === 'error'
-    ? '🔄 فتح نافذة التثبيت'
-    : phase === 'error'
-    ? '↩ إعادة التحميل'
-    : '📥 تثبيت التحديث';
+  const isDownloading = phase === 'downloading';
+  const isInstalling  = phase === 'installing';
+  const isLaunched    = phase === 'launched';
+  const isBusy        = isDownloading || isInstalling;
 
   return (
     <Modal transparent animationType="fade" visible={visible} statusBarTranslucent>
@@ -142,39 +138,59 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
         <View style={s.card}>
 
           <View style={s.iconRow}>
-            <View style={s.iconWrap}>
-              <Ionicons name="rocket-outline" size={moderateScale(34)} color="#60a5fa" />
+            <View style={[s.iconWrap, isLaunched && s.iconWrapGreen]}>
+              <Ionicons
+                name={isLaunched ? 'checkmark-circle-outline' : 'rocket-outline'}
+                size={moderateScale(34)}
+                color={isLaunched ? '#4ade80' : '#60a5fa'}
+              />
             </View>
           </View>
 
-          <Text style={s.title}>🎉 تحديث جديد متاح!</Text>
-          <Text style={s.version}>الإصدار {info.version}</Text>
+          {isLaunched ? (
+            <>
+              <Text style={s.title}>✅ جاهز للتثبيت!</Text>
+              <Text style={s.launchedSub}>
+                انتقل لنافذة المثبّت التي فُتحت للتو واضغط «تثبيت».{'\n'}
+                إذا أغلقتها عن طريق الخطأ اضغط «فتح مجدداً».
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={s.title}>🎉 تحديث جديد متاح!</Text>
+              <Text style={s.version}>الإصدار {info.version}</Text>
+            </>
+          )}
 
-          <ScrollView style={s.changelogBox} showsVerticalScrollIndicator={false}>
-            {changelog ? (
-              <>
-                <Text style={s.changelogTitle}>{changelog.title}</Text>
-                {changelog.items.map((item, i) => {
-                  const meta = ITEM_META[item.type] ?? ITEM_META.improve;
-                  return (
-                    <View key={i} style={s.changelogRow}>
-                      <View style={[s.changelogBadge, { backgroundColor: meta.color + '20' }]}>
-                        <Ionicons name={meta.icon as any} size={moderateScale(13)} color={meta.color} />
+          {!isLaunched && (
+            <ScrollView style={s.changelogBox} showsVerticalScrollIndicator={false}>
+              {changelog ? (
+                <>
+                  <Text style={s.changelogTitle}>{changelog.title}</Text>
+                  {changelog.items.map((item, i) => {
+                    const meta = ITEM_META[item.type] ?? ITEM_META.improve;
+                    return (
+                      <View key={i} style={s.changelogRow}>
+                        <View style={[s.changelogBadge, { backgroundColor: meta.color + '20' }]}>
+                          <Ionicons name={meta.icon as any} size={moderateScale(13)} color={meta.color} />
+                        </View>
+                        <Text style={s.changelogText}>{item.text}</Text>
                       </View>
-                      <Text style={s.changelogText}>{item.text}</Text>
-                    </View>
-                  );
-                })}
-              </>
-            ) : (
-              <Text style={s.changelogText}>{info.notes}</Text>
-            )}
-          </ScrollView>
+                    );
+                  })}
+                </>
+              ) : (
+                <Text style={s.changelogText}>{info.notes}</Text>
+              )}
+            </ScrollView>
+          )}
 
-          <View style={s.safeRow}>
-            <Ionicons name="shield-checkmark-outline" size={moderateScale(14)} color="#4ade80" />
-            <Text style={s.safeText}>بياناتك محفوظة — التحديث لا يمسّها</Text>
-          </View>
+          {!isLaunched && (
+            <View style={s.safeRow}>
+              <Ionicons name="shield-checkmark-outline" size={moderateScale(14)} color="#4ade80" />
+              <Text style={s.safeText}>بياناتك محفوظة — التحديث لا يمسّها</Text>
+            </View>
+          )}
 
           {/* شريط التحميل */}
           {isDownloading && (
@@ -186,7 +202,7 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
             </View>
           )}
 
-          {/* حالة التثبيت */}
+          {/* حالة فتح المثبّت */}
           {isInstalling && (
             <View style={s.progressWrap}>
               <ActivityIndicator color="#60a5fa" size="small" />
@@ -202,31 +218,53 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
             </View>
           )}
 
-          {/* زر التثبيت — يُخفى فقط أثناء التحميل أو التثبيت */}
-          {!isActive && (
-            <TouchableOpacity
-              style={[s.btnPrimary, phase === 'error' && !localApkUri && { backgroundColor: '#dc2626' }]}
-              onPress={handleInstall}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name={phase === 'error' && !localApkUri ? 'refresh-outline' : 'download-outline'}
-                size={moderateScale(19)}
-                color="#fff"
-              />
-              <Text style={s.btnPrimaryText}>{installBtnLabel}</Text>
-            </TouchableOpacity>
+          {/* أزرار حالة launched */}
+          {isLaunched && (
+            <>
+              <TouchableOpacity
+                style={s.btnReopen}
+                onPress={() => localApkUri && launchInstaller(localApkUri)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="open-outline" size={moderateScale(19)} color="#fff" />
+                <Text style={s.btnPrimaryText}>فتح نافذة التثبيت مجدداً</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.btnSecondary} onPress={onDismiss} activeOpacity={0.7}>
+                <Text style={s.btnSecondaryText}>إغلاق</Text>
+              </TouchableOpacity>
+            </>
           )}
 
-          {!isActive && (
-            <TouchableOpacity style={s.btnSecondary} onPress={handleLater} activeOpacity={0.7}>
-              <Text style={s.btnSecondaryText}>
-                {phase === 'error' ? 'إلغاء' : 'لاحقاً'}
-              </Text>
-            </TouchableOpacity>
+          {/* أزرار الحالات الأخرى */}
+          {!isBusy && !isLaunched && (
+            <>
+              <TouchableOpacity
+                style={[s.btnPrimary, phase === 'error' && !localApkUri && { backgroundColor: '#dc2626' }]}
+                onPress={handleInstall}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name={phase === 'error' && !localApkUri ? 'refresh-outline' : 'download-outline'}
+                  size={moderateScale(19)}
+                  color="#fff"
+                />
+                <Text style={s.btnPrimaryText}>
+                  {localApkUri && phase === 'error'
+                    ? '🔄 فتح نافذة التثبيت'
+                    : phase === 'error'
+                    ? '↩ إعادة التحميل'
+                    : '📥 تثبيت التحديث'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.btnSecondary} onPress={handleLater} activeOpacity={0.7}>
+                <Text style={s.btnSecondaryText}>
+                  {phase === 'error' ? 'إلغاء' : 'لاحقاً'}
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
 
-          {isActive && (
+          {isBusy && (
             <Text style={s.waitHint}>يُرجى الانتظار...</Text>
           )}
 
@@ -254,12 +292,13 @@ const s = StyleSheet.create({
     borderColor: '#3b82f640',
     maxHeight: '88%',
   },
-  iconRow:  { alignItems: 'center' },
+  iconRow:      { alignItems: 'center' },
   iconWrap: {
     width: moderateScale(68), height: moderateScale(68),
     borderRadius: moderateScale(34), backgroundColor: '#3b82f615',
     alignItems: 'center', justifyContent: 'center',
   },
+  iconWrapGreen: { backgroundColor: '#4ade8015' },
   title: {
     color: '#f1f5f9', fontSize: clampFont(19, 16, 23),
     fontWeight: '700', textAlign: 'center',
@@ -267,6 +306,10 @@ const s = StyleSheet.create({
   version: {
     color: '#60a5fa', fontSize: clampFont(13, 12, 15),
     textAlign: 'center', fontWeight: '600',
+  },
+  launchedSub: {
+    color: '#94a3b8', fontSize: clampFont(13, 12, 15),
+    textAlign: 'center', lineHeight: moderateScale(22),
   },
   changelogBox: {
     maxHeight: moderateScale(180),
@@ -280,10 +323,8 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
   changelogRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: moderateScale(8),
-    marginBottom: moderateScale(7),
+    flexDirection: 'row', alignItems: 'flex-start',
+    gap: moderateScale(8), marginBottom: moderateScale(7),
   },
   changelogBadge: {
     width: moderateScale(22), height: moderateScale(22),
@@ -312,8 +353,7 @@ const s = StyleSheet.create({
     borderRadius: moderateScale(4), overflow: 'hidden',
   },
   progressBarFill: {
-    height: '100%',
-    backgroundColor: '#3b82f6',
+    height: '100%', backgroundColor: '#3b82f6',
     borderRadius: moderateScale(4),
   },
   progressText: {
@@ -330,6 +370,11 @@ const s = StyleSheet.create({
   btnPrimary: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: moderateScale(8), backgroundColor: '#1d4ed8',
+    borderRadius: moderateScale(14), paddingVertical: moderateScale(15),
+  },
+  btnReopen: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: moderateScale(8), backgroundColor: '#16a34a',
     borderRadius: moderateScale(14), paddingVertical: moderateScale(15),
   },
   btnPrimaryText: {
