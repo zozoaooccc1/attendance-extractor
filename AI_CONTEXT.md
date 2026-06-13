@@ -66,3 +66,26 @@ curl -X PUT -H "Authorization: token $GITHUB_TOKEN" ...
 
 ## Replit Dev Domain
 `47eaabd4-5226-4cf2-9645-0069fe462693-00-1830rv7d5wjt2.sisko.replit.dev`
+
+## التغييرات المنجزة (v3.1.4) — جلسة 2026-06-13
+
+### 1. إزالة AI Scan من capture.tsx
+حُذف زر AI scan كاملاً (state, handleAiScan, UI card, styles). الوقت الرسمي يُستخدم مباشرةً.
+
+### 2. دعم الإنجليزية لصفحة الموظف
+أُضيف قسم employee إلى i18n/index.ts (ar+en). employee.tsx يستخدم t.employee.*
+
+### 3. تغيير اسم الفترة
+فترة الشركة → فترة دوام الشركة في: i18n (today+reports, ar+en) + reports.tsx (3 مواضع)
+
+### 4. المنبّه الصاخب — عودة لنظام الشفت
+scheduleAlarmBurst(shiftType): single→12:00 فقط، double→9:00+16:00 فقط. settings.tsx يمرر notifShift.
+
+### 5. إصلاح شريط الخط RTL
+FontSlider في settings.tsx: isRTL prop جديد. toPercent يعكس الإحداثي عند RTL.
+
+### 6. إزالة اختيار الصفحة الرئيسية
+SettingsContext: حُذف defaultTab/setDefaultTab. settings.tsx: حُذف GROUP الصفحة الرئيسية. _layout.tsx: initialRouteName=employee مثبّت.
+
+### 7. إصلاح توقيت الخروج
+getEarliestExitCapture يرجع exitTime مباشرةً (بدون -15دق). رسالة index.tsx تعكس القاعدة الجديدة.
