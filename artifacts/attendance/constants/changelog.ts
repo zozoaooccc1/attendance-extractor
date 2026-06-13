@@ -7,6 +7,20 @@ export interface ChangelogItem {
 
 const changelog: ChangelogItem[] = [
   {
+    version: '3.1.4',
+    title: 'multi_fix_and_i18n',
+    date: '2026-06-13',
+    items: [
+      { type: 'fix',     text: 'alarm_burst_per_shift_not_mixed' },
+      { type: 'fix',     text: 'font_slider_rtl_direction' },
+      { type: 'fix',     text: 'exit_capture_only_after_shift_ends' },
+      { type: 'fix',     text: 'remove_ai_scan_403_error' },
+      { type: 'new',     text: 'employee_tab_is_default_home' },
+      { type: 'new',     text: 'employee_tab_english_translations' },
+      { type: 'improve', text: 'period_name_farsh_dawam_alsharka' },
+    ],
+  },
+  {
     version: '3.1.3',
     title: 'fix_crash_and_ai',
     date: '2026-06-12',
@@ -90,4 +104,4 @@ export function getLatestChangelog(): ChangelogItem | null {
   return changelog[0] ?? null;
 }
 
-export const CURRENT_VERSION = '3.1.3';
+export const CURRENT_VERSION = '3.1.4';
