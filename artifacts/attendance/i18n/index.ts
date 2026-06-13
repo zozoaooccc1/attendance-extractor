@@ -222,6 +222,22 @@ export interface AppTranslations {
     disablePIN: string;
   };
 
+  employee: {
+    title: string;
+    subtitle: string;
+    personalInfo: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    deptLabel: string;
+    deptPlaceholder: string;
+    shiftType: string;
+    singleShiftSub: string;
+    doubleShiftSub: string;
+    active: string;
+    monthlyStats: string;
+    lateMinutes: string;
+  };
+
   lock: {
     title: string;
     biometricSub: string;
@@ -259,7 +275,7 @@ const ar: AppTranslations = {
   tabs: { today: 'اليوم', history: 'السجل', calendar: 'التقويم', reports: 'التقارير' },
 
   today: {
-    companyPeriod: 'فترة الشركة:',
+    companyPeriod: 'فترة دوام الشركة:',
     progress: 'تقدم اليوم',
     allComplete: 'جميع السجلات مكتملة اليوم!',
     timeToExit: 'المتبقي للانصراف:',
@@ -300,7 +316,7 @@ const ar: AppTranslations = {
   reports: {
     exportPdf: 'تصدير PDF',
     shareWhatsapp: 'مشاركة على واتساب',
-    companyPeriod: 'فترة الشركة',
+    companyPeriod: 'فترة دوام الشركة',
     specificMonth: 'شهر محدد',
     commitmentRate: 'نسبة الالتزام',
     excellent: 'ممتاز',
@@ -456,6 +472,22 @@ const ar: AppTranslations = {
     disablePIN: 'إلغاء PIN',
   },
 
+  employee: {
+    title: 'بيانات الموظف',
+    subtitle: 'معلوماتك الشخصية وإحصائيات الحضور',
+    personalInfo: 'المعلومات الشخصية',
+    nameLabel: 'اسم الموظف',
+    namePlaceholder: 'اضغط لإضافة الاسم',
+    deptLabel: 'القسم',
+    deptPlaceholder: 'اضغط لإضافة القسم',
+    shiftType: 'نوع الدوام',
+    singleShiftSub: 'تصوير واحد في اليوم',
+    doubleShiftSub: 'تصويران في اليوم',
+    active: 'فعّال',
+    monthlyStats: 'إحصائيات الشهر الحالي',
+    lateMinutes: 'دقائق التأخير هذا الشهر',
+  },
+
   lock: {
     title: 'تطبيق الحضور',
     biometricSub: 'محمي بالبصمة / Face ID',
@@ -493,7 +525,7 @@ const en: AppTranslations = {
   tabs: { today: 'Today', history: 'History', calendar: 'Calendar', reports: 'Reports' },
 
   today: {
-    companyPeriod: 'Company Period:',
+    companyPeriod: 'Work Period:',
     progress: "Today's Progress",
     allComplete: 'All records complete today!',
     timeToExit: 'Time to exit:',
@@ -534,7 +566,7 @@ const en: AppTranslations = {
   reports: {
     exportPdf: 'Export PDF',
     shareWhatsapp: 'Share on WhatsApp',
-    companyPeriod: 'Company Period',
+    companyPeriod: 'Work Period',
     specificMonth: 'Specific Month',
     commitmentRate: 'Commitment Rate',
     excellent: 'Excellent',
@@ -688,6 +720,22 @@ const en: AppTranslations = {
     mismatch: 'Codes do not match — try again',
     backLink: '← Go back to enter a new code',
     disablePIN: 'Disable PIN',
+  },
+
+  employee: {
+    title: 'Employee Data',
+    subtitle: 'Your personal info and attendance stats',
+    personalInfo: 'Personal Information',
+    nameLabel: 'Employee Name',
+    namePlaceholder: 'Tap to add your name',
+    deptLabel: 'Department',
+    deptPlaceholder: 'Tap to add department',
+    shiftType: 'Shift Type',
+    singleShiftSub: 'One capture per day',
+    doubleShiftSub: 'Two captures per day',
+    active: 'Active',
+    monthlyStats: 'Monthly Statistics',
+    lateMinutes: 'Late minutes this month',
   },
 
   lock: {
