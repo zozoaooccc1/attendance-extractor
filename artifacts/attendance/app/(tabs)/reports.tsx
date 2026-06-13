@@ -157,7 +157,7 @@ function buildCsv(records: AttendanceRecord[], period: CompanyPeriod, employeeNa
   const lines: string[] = [];
   if (employeeName) lines.push(`اسم الموظف,${employeeName}`);
   if (department)   lines.push(`القسم,${department}`);
-  lines.push(`فترة الشركة,${period.label}`, `تاريخ التصدير,${new Date().toLocaleDateString('ar')}`, '',
+  lines.push(`فترة دوام الشركة,${period.label}`, `تاريخ التصدير,${new Date().toLocaleDateString('ar')}`, '',
     'التاريخ,النوع,الوقت,مزامن,تأخر,سبب التأخير');
   const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
   for (const r of sorted) {
@@ -291,7 +291,7 @@ export default function ReportsScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 110 }]} showsVerticalScrollIndicator={false}>
 
         <View style={[styles.modeRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {([['period','فترة الشركة'],['month','شهر محدد']] as const).map(([mode, label]) => (
+          {([['period','فترة دوام الشركة'],['month','شهر محدد']] as const).map(([mode, label]) => (
             <TouchableOpacity key={mode} style={[styles.modeBtn, exportMode === mode && { backgroundColor: colors.primary }]} onPress={() => setExportMode(mode)}>
               <Text style={[styles.modeBtnText, { color: exportMode === mode ? colors.primaryForeground : colors.mutedForeground }, exportMode === mode && { fontFamily: 'Inter_700Bold' }]}>{label}</Text>
             </TouchableOpacity>
@@ -305,7 +305,7 @@ export default function ReportsScreen() {
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
               <Text style={[styles.periodLabel, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>{period.label}</Text>
-              <Text style={[styles.periodHint, { color: colors.mutedForeground }]}>فترة الشركة (26 → 25)</Text>
+              <Text style={[styles.periodHint, { color: colors.mutedForeground }]}>فترة دوام الشركة (26 → 25)</Text>
             </View>
             <TouchableOpacity onPress={() => setPeriod(p => shiftCompanyPeriod(p, 1))} style={styles.arrowBtn}>
               <Ionicons name="chevron-forward" size={moderateScale(22)} color={colors.primary} />
