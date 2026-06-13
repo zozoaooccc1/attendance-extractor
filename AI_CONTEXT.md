@@ -89,3 +89,10 @@ SettingsContext: حُذف defaultTab/setDefaultTab. settings.tsx: حُذف GROUP
 
 ### 7. إصلاح توقيت الخروج
 getEarliestExitCapture يرجع exitTime مباشرةً (بدون -15دق). رسالة index.tsx تعكس القاعدة الجديدة.
+
+## Version Bump — 2026-06-13
+- version: 3.1.3 → 3.1.4
+- versionCode: 35 → 36
+- commit: 32b1fbfdca368d7f1184a80a0d046330cdcc5899
+- EAS preview build triggered immediately after this commit
+
