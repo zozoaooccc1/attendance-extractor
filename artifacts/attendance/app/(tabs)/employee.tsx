@@ -11,6 +11,7 @@ import { useColors } from '@/hooks/useColors';
 import { useSettings } from '@/context/SettingsContext';
 import { useAttendance } from '@/context/AttendanceContext';
 import { useEmployee } from '@/context/EmployeeContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { ShiftType } from '@/constants/types';
 import { isFridayDate } from '@/constants/scheduleConfig';
 import { moderateScale, clampFont, spacing, buildFontSize } from '@/utils/responsive';
@@ -59,6 +60,7 @@ export default function EmployeeScreen() {
   const { fontMultiplier } = useSettings();
   const { shiftType, setShiftType, getRecordForMonth, todayRecords } = useAttendance();
   const { employeeName, setEmployeeName, department, setDepartment } = useEmployee();
+  const { t } = useLanguage();
 
   const fs = useMemo(() => buildFontSize(fontMultiplier), [fontMultiplier]);
 
