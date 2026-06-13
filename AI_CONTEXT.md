@@ -7,9 +7,9 @@ EAS Project ID: e0d07504-ef8f-4a60-9ce3-92694b0d6804
 EAS Account: amr9925487962
 
 ## الإصدار الحالي
-- **version**: 3.1.3  
-- **versionCode**: 35  
-- **آخر تحديث**: 2026-06-12
+- **version**: 3.1.6  
+- **versionCode**: 38  
+- **آخر تحديث**: 2026-06-13
 
 ## البنية
 - `artifacts/attendance/` — تطبيق Expo (React Native)
@@ -90,9 +90,17 @@ SettingsContext: حُذف defaultTab/setDefaultTab. settings.tsx: حُذف GROUP
 ### 7. إصلاح توقيت الخروج
 getEarliestExitCapture يرجع exitTime مباشرةً (بدون -15دق). رسالة index.tsx تعكس القاعدة الجديدة.
 
-## Version Bump — 2026-06-13
-- version: 3.1.3 → 3.1.4
-- versionCode: 35 → 36
-- commit: 32b1fbfdca368d7f1184a80a0d046330cdcc5899
-- EAS preview build triggered immediately after this commit
+## التغييرات المنجزة (v3.1.6) — جلسة 2026-06-13
 
+### Bug 3 — كراش صفحة الموظف ✅
+**المشكلة**: `employee.tsx` يستخدم المتغير `t` في كل مكان (t.employee.title, t.settings.singleShift...) دون استيراد `useLanguage` → ReferenceError عند فتح الصفحة → كراش فوري.
+
+**الحل**: أُضيف `import { useLanguage } from '@/context/LanguageContext'` و `const { t } = useLanguage()` داخل `EmployeeScreen`.
+
+**الملف المتأثر**: `artifacts/attendance/app/(tabs)/employee.tsx`
+
+## Version Bumps
+- v3.1.3: versionCode 35 — commit: 32b1fbfdca368d7f1184a80a0d046330cdcc5899
+- v3.1.4: versionCode 36 — commit: 32b1fbfdca368d7f1184a80a0d046330cdcc5899
+- v3.1.5: versionCode 37 — commit: 7ba488a
+- v3.1.6: versionCode 38 — إصلاح كراش صفحة الموظف
