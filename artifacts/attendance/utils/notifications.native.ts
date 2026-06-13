@@ -142,20 +142,25 @@ async function scheduleAlarmWindow(
   if (batch.length > 0) await Promise.all(batch);
 }
 
-// ── PUBLIC: schedule aggressive alarm burst before ALL shift entries ──────────
-// Fires for ALL entry times: single (12:00), double-entry1 (9:00), double-entry2 (16:00)
+// ── PUBLIC: schedule aggressive alarm burst before shift entry ────────────────
 // Called when "المنبّه الصاخب" is enabled in settings
-export async function scheduleAlarmBurst(): Promise<void> {
+export async function scheduleAlarmBurst(
+  shiftType: 'single' | 'double',
+): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
     setupNotificationHandler();
     await ensureChannels();
     await cancelAllAttendanceReminders();
 
-    // جميع أوقات الدخول — شفت واحد (12:00م) وشفتين (9:00ص و4:00م)
-    await scheduleAlarmWindow(9,  0, '🌅 دخول الشفت الأول (9:00 ص)');
-    await scheduleAlarmWindow(12, 0, '🕛 موعد بصمة الدخول (12:00 م)');
-    await scheduleAlarmWindow(16, 0, '🌆 دخول الشفت الثاني (4:00 م)');
+    if (shiftType === 'single') {
+      // Single shift entry: 12:00
+      await scheduleAlarmWindow(12, 0, 'موعد بصمة الدخول');
+    } else {
+      // Double shift entry1: 9:00, entry2: 16:00
+      await scheduleAlarmWindow(9,  0, 'دخول الشفت الأول');
+      await scheduleAlarmWindow(16, 0, 'دخول الشفت الثاني');
+    }
   } catch (err) {
     console.warn('[Notifications] scheduleAlarmBurst error:', err);
   }
