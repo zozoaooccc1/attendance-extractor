@@ -361,7 +361,7 @@ export default function SettingsScreen() {
       if (notifEnabled) {
         if (alarmBeforeShift) {
           // المنبّه الصاخب: إشعار كل 5 ثوانٍ قبل 15 دقيقة من الدوام
-          await scheduleAlarmBurst(notifShift);
+          await scheduleAlarmBurst();
           Alert.alert('تم حفظ الإعدادات ✅', 'المنبّه الصاخب مفعّل — سيتكرر الإشعار كل 5 ثوانٍ قبل 15 دقيقة من الدوام', [{ text: 'حسناً' }]);
         } else {
           if (notifShift === 'single') await scheduleSingleShiftReminders(earlyReminder ? 5 : 0);
@@ -608,7 +608,7 @@ export default function SettingsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rowTitle, { color: colors.foreground }]}>المنبّه الصاخب</Text>
                 <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
-                  إشعار كل 5 ثوانٍ — 15 دقيقة قبل الدوام
+                  ينبّه قبل كل دخول (شفت واحد + شفتين) — فقط الدخول
                 </Text>
               </View>
               <Switch value={alarmBeforeShift} onValueChange={setAlarmBeforeShift}
@@ -626,12 +626,11 @@ export default function SettingsScreen() {
             )}
             <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
               <View style={[styles.scheduleBox, { borderColor: colors.border }]}>
-                {(notifShift === 'single' ? [
-                  { time: '11:45 — 12:00 م', label: 'قبل بصمة الدخول (شفت واحد)', icon: 'alarm-outline' as const },
-                ] : [
-                  { time: '8:45 — 9:00 ص',  label: 'قبل بصمة الشفت الأول',  icon: 'alarm-outline' as const },
-                  { time: '3:45 — 4:00 م',   label: 'قبل بصمة الشفت الثاني', icon: 'alarm-outline' as const },
-                ]).map((s, i, arr) => (
+                {[
+                  { time: '8:45 — 9:00 ص',  label: 'دخول الشفت الأول (شفتين)',  icon: 'alarm-outline' as const },
+                  { time: '11:45 — 12:00 م', label: 'بصمة الدخول (شفت واحد)', icon: 'alarm-outline' as const },
+                  { time: '3:45 — 4:00 م',   label: 'دخول الشفت الثاني (شفتين)', icon: 'alarm-outline' as const },
+                ].map((s, i, arr) => (
                   <View key={i} style={[styles.schedItem, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
                     <View style={[styles.schedIcon, { backgroundColor: alarmBeforeShift ? '#ef444415' : colors.muted + '30' }]}>
                       <Ionicons name={s.icon} size={moderateScale(14)} color={alarmBeforeShift ? '#ef4444' : colors.mutedForeground} />
