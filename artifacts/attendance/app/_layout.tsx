@@ -22,6 +22,7 @@ import { AttendanceProvider } from "@/context/AttendanceContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { SettingsProvider, useSettings } from "@/context/SettingsContext";
 import { EmployeeProvider } from "@/context/EmployeeContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import { isPINEnabled, verifyPIN } from "@/utils/pinAuth";
 import { moderateScale, clampFont } from "@/utils/responsive";
 import { RestoreModal } from "@/components/RestoreModal";
@@ -380,21 +381,23 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SettingsProvider>
-        <ThemeProvider>
-          <ErrorBoundary>
-            <QueryClientProvider client={queryClient}>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardProvider>
-                  <AttendanceProvider>
-                    <EmployeeProvider>
-                      <SettingsGate />
-                    </EmployeeProvider>
-                  </AttendanceProvider>
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </QueryClientProvider>
-          </ErrorBoundary>
-        </ThemeProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <ErrorBoundary>
+              <QueryClientProvider client={queryClient}>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <KeyboardProvider>
+                    <AttendanceProvider>
+                      <EmployeeProvider>
+                        <SettingsGate />
+                      </EmployeeProvider>
+                    </AttendanceProvider>
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </QueryClientProvider>
+            </ErrorBoundary>
+          </ThemeProvider>
+        </LanguageProvider>
       </SettingsProvider>
 
       <RestoreModal
