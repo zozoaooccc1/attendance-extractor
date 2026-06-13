@@ -125,16 +125,16 @@ export default function EmployeeScreen() {
         </View>
         <View>
           <Text style={{ fontSize: clampFont(20, 17, 24) * fontMultiplier, fontFamily: 'Inter_700Bold', color: colors.foreground }}>
-            بيانات الموظف
+            {t.employee.title}
           </Text>
           <Text style={{ fontSize: fs.xs, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }}>
-            معلوماتك الشخصية وإحصائيات الحضور
+            {t.employee.subtitle}
           </Text>
         </View>
       </View>
 
       {/* ── GROUP: المعلومات الشخصية ─────────────────────────────────────── */}
-      <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>المعلومات الشخصية</Text>
+      <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>{t.employee.personalInfo}</Text>
       <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
 
         {/* Name row */}
@@ -143,7 +143,7 @@ export default function EmployeeScreen() {
             <Ionicons name="person-outline" size={moderateScale(18)} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>اسم الموظف</Text>
+            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{t.employee.nameLabel}</Text>
             {editingName ? (
               <TextInput
                 value={nameInput}
@@ -162,7 +162,7 @@ export default function EmployeeScreen() {
                   color: employeeName ? colors.foreground : colors.mutedForeground + '88',
                   fontFamily: employeeName ? 'Inter_500Medium' : 'Inter_400Regular',
                 }]}>
-                  {employeeName || 'اضغط لإضافة الاسم'}
+                  {employeeName || t.employee.namePlaceholder}
                 </Text>
               </TouchableOpacity>
             )}
@@ -186,7 +186,7 @@ export default function EmployeeScreen() {
             <Ionicons name="business-outline" size={moderateScale(18)} color="#3b82f6" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>القسم</Text>
+            <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{t.employee.deptLabel}</Text>
             {editingDept ? (
               <TextInput
                 value={deptInput}
@@ -205,7 +205,7 @@ export default function EmployeeScreen() {
                   color: department ? colors.foreground : colors.mutedForeground + '88',
                   fontFamily: department ? 'Inter_500Medium' : 'Inter_400Regular',
                 }]}>
-                  {department || 'اضغط لإضافة القسم'}
+                  {department || t.employee.deptPlaceholder}
                 </Text>
               </TouchableOpacity>
             )}
@@ -224,7 +224,7 @@ export default function EmployeeScreen() {
       </View>
 
       {/* ── GROUP: نوع الدوام ─────────────────────────────────────────────── */}
-      <Text style={[styles.groupLabel, { color: colors.mutedForeground, marginTop: moderateScale(14) }]}>نوع الدوام</Text>
+      <Text style={[styles.groupLabel, { color: colors.mutedForeground, marginTop: moderateScale(14) }]}>{t.employee.shiftType}</Text>
       <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
 
         {/* Shift info row */}
@@ -238,10 +238,10 @@ export default function EmployeeScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.rowTitle, { color: colors.foreground }]}>
-              {shiftType === 'single' ? 'شفت واحد' : 'شفتان'}
+              {shiftType === 'single' ? t.settings.singleShift : t.settings.doubleShift}
             </Text>
             <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
-              {shiftType === 'single' ? 'تصوير واحد في اليوم' : 'تصويران في اليوم'}
+              {shiftType === 'single' ? t.employee.singleShiftSub : t.employee.doubleShiftSub}
             </Text>
           </View>
           <View style={[styles.statusBadge, {
@@ -249,7 +249,7 @@ export default function EmployeeScreen() {
             borderColor: colors.primary + '30',
           }]}>
             <Text style={[styles.statusBadgeText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
-              {shiftType === 'single' ? 'فعّال' : 'فعّال'}
+              {t.employee.active}
             </Text>
           </View>
         </View>
@@ -279,7 +279,7 @@ export default function EmployeeScreen() {
                   color: isActive ? '#fff' : colors.mutedForeground,
                   fontFamily: isActive ? 'Inter_600SemiBold' : 'Inter_400Regular',
                 }]}>
-                  {s === 'single' ? 'شفت واحد' : 'شفتان'}
+                  {s === 'single' ? t.settings.singleShift : t.settings.doubleShift}
                 </Text>
               </TouchableOpacity>
             );
@@ -290,7 +290,7 @@ export default function EmployeeScreen() {
 
       {/* ── GROUP: إحصائيات الشهر ────────────────────────────────────────── */}
       <Text style={[styles.groupLabel, { color: colors.mutedForeground, marginTop: moderateScale(14) }]}>
-        إحصائيات الشهر الحالي
+        {t.employee.monthlyStats}
       </Text>
       {/* Late counter — full width */}
       <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -298,7 +298,7 @@ export default function EmployeeScreen() {
           <Ionicons name="time-outline" size={moderateScale(18)} color="#ef4444" />
         </View>
         <Text style={[styles.rowSub, { color: colors.mutedForeground, marginTop: moderateScale(8) }]}>
-          دقائق التأخير هذا الشهر
+          {t.employee.lateMinutes}
         </Text>
         <Text style={[styles.statValue, { color: '#ef4444', fontFamily: 'Inter_700Bold' }]}>
           {lateFmt.value}
