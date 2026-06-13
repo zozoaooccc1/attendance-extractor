@@ -174,10 +174,9 @@ export function getExitTime(type: 'exit1' | 'exit2', shiftType: ShiftType, now: 
   return midnight;
 }
 
-// Returns the earliest allowed time to capture an exit photo (15 min before exit)
+// Returns the earliest allowed time to capture an exit photo (exactly at shift end — no early capture)
 export function getEarliestExitCapture(type: 'exit1' | 'exit2', shiftType: ShiftType, now: Date): Date {
-  const exitTime = getExitTime(type, shiftType, now);
-  return new Date(exitTime.getTime() - 15 * 60 * 1000);
+  return getExitTime(type, shiftType, now);
 }
 
 export function formatTimeHHMM(d: Date): string {
