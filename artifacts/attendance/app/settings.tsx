@@ -18,7 +18,7 @@ import {
 import { getImagesStats, deleteImagesOlderThan } from '@/utils/imageStorage';
 import { useColors } from '@/hooks/useColors';
 import { useTheme, ThemePreference } from '@/context/ThemeContext';
-import { useSettings, TimeFormat, FontScale, DefaultTab } from '@/context/SettingsContext';
+import { useSettings, TimeFormat, FontScale } from '@/context/SettingsContext';
 import { useAttendance } from '@/context/AttendanceContext';
 import { isPINEnabled, disablePIN } from '@/utils/pinAuth';
 import {
@@ -61,13 +61,14 @@ const DOUBLE_SCHEDULE = [
 type UpdateStatus = 'idle'|'checking'|'downloading'|'up-to-date'|'error';
 
 // ── مكوّن شريط تمرير حجم الخط ───────────────────────────────────────────────
-function FontSlider({ value, onChange, colors: c }: { value: number; onChange: (v: number) => void; colors: any }) {
+function FontSlider({ value, onChange, colors: c, isRTL: rtl }: { value: number; onChange: (v: number) => void; colors: any; isRTL?: boolean }) {
   const MIN = 80, MAX = 150;
   const sliderWidthRef = useRef(0);
 
   const toPercent = (px: number) => {
     if (sliderWidthRef.current <= 0) return value;
-    const raw = MIN + (px / sliderWidthRef.current) * (MAX - MIN);
+    const adjustedPx = rtl ? sliderWidthRef.current - px : px;
+    const raw = MIN + (adjustedPx / sliderWidthRef.current) * (MAX - MIN);
     return Math.max(MIN, Math.min(MAX, Math.round(raw)));
   };
 
@@ -129,7 +130,7 @@ export default function SettingsScreen() {
     highContrast, setHighContrast,
     earlyReminder, setEarlyReminder,
     alarmBeforeShift, setAlarmBeforeShift,
-    fontMultiplier, language, setLanguage, t, defaultTab, setDefaultTab,
+    fontMultiplier, language, setLanguage, t, isRTL,
     maxStorageMB, setMaxStorageMB,
   } = useSettings();
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
@@ -361,7 +362,7 @@ export default function SettingsScreen() {
       if (notifEnabled) {
         if (alarmBeforeShift) {
           // المنبّه الصاخب: إشعار كل 5 ثوانٍ قبل 15 دقيقة من الدوام
-          await scheduleAlarmBurst();
+          await scheduleAlarmBurst(notifShift);
           Alert.alert('تم حفظ الإعدادات ✅', 'المنبّه الصاخب مفعّل — سيتكرر الإشعار كل 5 ثوانٍ قبل 15 دقيقة من الدوام', [{ text: 'حسناً' }]);
         } else {
           if (notifShift === 'single') await scheduleSingleShiftReminders(earlyReminder ? 5 : 0);
@@ -479,7 +480,7 @@ export default function SettingsScreen() {
           expanded={openSection === 'font'} onPress={() => toggleSection('font')} />
         {openSection === 'font' && (
           <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
-            <FontSlider value={fontSizePercent} onChange={setFontSizePercent} colors={colors} />
+            <FontSlider value={fontSizePercent} onChange={setFontSizePercent} colors={colors} isRTL={isRTL} />
             {/* معاينة سريعة */}
             <View style={{ backgroundColor: colors.muted, borderRadius: moderateScale(10), padding: moderateScale(12), marginTop: 4 }}>
               <Text style={{ color: colors.foreground, fontSize: 14 * fontMultiplier, fontFamily: 'Inter_700Bold', textAlign: 'center' }}>
@@ -533,40 +534,6 @@ export default function SettingsScreen() {
 
       </View>
 
-
-      {/* ══════════════ GROUP: الصفحة الرئيسية ══════════════ */}
-      <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>
-        {language === 'ar' ? 'الصفحة الرئيسية' : 'Home Tab'}
-      </Text>
-      <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[styles.rowExpand, { borderTopWidth: 0, paddingTop: moderateScale(12) }]}>
-          <Text style={[styles.rowSub, { color: colors.mutedForeground, marginBottom: moderateScale(6) }]}>
-            {language === 'ar' ? 'اختر الصفحة التي تظهر عند فتح التطبيق' : 'Choose which tab opens on launch'}
-          </Text>
-          <View style={styles.chipRow}>
-            {([
-              { key: 'employee', labelAr: 'الموظف',  icon: 'person-outline'        },
-              { key: 'index',    labelAr: 'اليوم',   icon: 'home-outline'          },
-              { key: 'history',  labelAr: 'السجل',   icon: 'list-outline'          },
-              { key: 'calendar', labelAr: 'التقويم', icon: 'calendar-outline'      },
-              { key: 'reports',  labelAr: 'التقارير',icon: 'document-text-outline' },
-            ] as { key: DefaultTab; labelAr: string; icon: string }[]).map(opt => (
-              <TouchableOpacity key={opt.key}
-                style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.muted },
-                  defaultTab === opt.key && { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                onPress={() => setDefaultTab(opt.key)}
-              >
-                <Ionicons name={opt.icon as any} size={moderateScale(14)}
-                  color={defaultTab === opt.key ? colors.primaryForeground : colors.mutedForeground} />
-                <Text style={[styles.chipText, { color: defaultTab === opt.key ? colors.primaryForeground : colors.mutedForeground },
-                  defaultTab === opt.key && { fontFamily: 'Inter_700Bold' }]}>
-                  {opt.labelAr}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </View>
 
       {/* ══════════════ GROUP: التنبيهات ══════════════ */}
       <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>
@@ -626,11 +593,13 @@ export default function SettingsScreen() {
             )}
             <View style={[styles.rowExpand, { borderTopColor: colors.border }]}>
               <View style={[styles.scheduleBox, { borderColor: colors.border }]}>
-                {[
-                  { time: '8:45 — 9:00 ص',  label: 'دخول الشفت الأول (شفتين)',  icon: 'alarm-outline' as const },
-                  { time: '11:45 — 12:00 م', label: 'بصمة الدخول (شفت واحد)', icon: 'alarm-outline' as const },
-                  { time: '3:45 — 4:00 م',   label: 'دخول الشفت الثاني (شفتين)', icon: 'alarm-outline' as const },
-                ].map((s, i, arr) => (
+                {(notifShift === 'single'
+                  ? [{ time: '11:45 — 12:00 م', label: 'موعد بصمة الدخول', icon: 'alarm-outline' as const }]
+                  : [
+                      { time: '8:45 — 9:00 ص',  label: 'دخول الشفت الأول',   icon: 'alarm-outline' as const },
+                      { time: '3:45 — 4:00 م',   label: 'دخول الشفت الثاني', icon: 'alarm-outline' as const },
+                    ]
+                ).map((s, i, arr) => (
                   <View key={i} style={[styles.schedItem, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
                     <View style={[styles.schedIcon, { backgroundColor: alarmBeforeShift ? '#ef444415' : colors.muted + '30' }]}>
                       <Ionicons name={s.icon} size={moderateScale(14)} color={alarmBeforeShift ? '#ef4444' : colors.mutedForeground} />
