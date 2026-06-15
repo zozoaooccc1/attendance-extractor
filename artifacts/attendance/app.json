@@ -2,15 +2,15 @@
   "expo": {
     "name": "تطبيق الحضور",
     "slug": "attendance",
-    "version": "3.1.8",
+    "version": "3.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "attendance",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "extra": {
       "eas": {
-        "projectId": "e0d07504-ef8f-4a60-9ce3-92694b0d6804"
+        "projectId": "6c86f18d-eec0-489a-b4c8-9d2b8d678606"
       }
     },
     "splash": {
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.attendance.app",
-      "versionCode": 40,
+      "versionCode": 44,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -58,7 +58,7 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     }
   }
 }

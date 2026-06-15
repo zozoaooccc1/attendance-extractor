@@ -37,7 +37,21 @@ import { checkForAppUpdate, type AppUpdateInfo } from "@/utils/easUpdateChecker"
 import { initOneSignal } from "@/utils/oneSignalService";
 
 SplashScreen.preventAutoHideAsync();
-setupNotificationHandler();
+
+// ── Global error handler — يلتقط أي خطأ غير معالج ──────────────────────────────
+if (typeof ErrorUtils !== 'undefined') {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    console.error('[GlobalHandler]', isFatal ? 'FATAL' : 'ERROR', error);
+    // لا نعيد رمي الخطأ — نمنع الكراش الفوري
+    // if (originalHandler) originalHandler(error, isFatal);
+  });
+}
+
+// ── Notification handler setup — فحص المنصة قبل الاستدعاء ────────────────────────
+if (Platform.OS !== 'web') {
+  try { setupNotificationHandler(); } catch {}
+}
 const queryClient = new QueryClient();
 const BIOMETRIC_KEY = "attendance_biometric_lock";
 const AUTO_LOCK_MS = 2 * 60 * 1000;
@@ -122,24 +136,25 @@ function PINLockScreen({ onUnlock }: { onUnlock: () => void }) {
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
 
+  const handleSubmit = async (pinDigits: string[]) => {
+    if (checking) return;
+    setChecking(true);
+    const pin = pinDigits.join('');
+    const ok = await verifyPIN(pin);
+    if (ok) { onUnlock(); return; }
+    setError("رمز خاطئ، حاول مجدداً");
+    setTimeout(() => { setDigits([]); setChecking(false); }, 600);
+  };
+
   const handleDigit = async (d: string) => {
     if (checking || digits.length >= 6) return;
     const next = [...digits, d];
     setDigits(next);
     setError("");
-    if (next.length >= 4) {
-      setChecking(true);
-      const pin = next.join('');
-      const ok = await verifyPIN(pin);
-      if (ok) { onUnlock(); return; }
-      if (next.length >= 6 || next.length === 4) {
-        if (!ok) {
-          setError("رمز خاطئ، حاول مجدداً");
-          setTimeout(() => { setDigits([]); setChecking(false); }, 600);
-          return;
-        }
-      }
-      setChecking(false);
+    // التحقق التلقائي عند إدخال 4 أرقام (بعد تأخير قصير)
+    if (next.length === 4) {
+      // انتظار قصير ليتم تحديث الحالة قبل التحقق
+      setTimeout(() => handleSubmit(next), 100);
     }
   };
 
@@ -163,7 +178,7 @@ function PINLockScreen({ onUnlock }: { onUnlock: () => void }) {
               {row.map(k => (
                 <TouchableOpacity
                   key={k} style={pin.kBtn}
-                  onPress={() => { if (k === '⌫') handleBack(); else if (k === '✓') {} else handleDigit(k); }}
+                  onPress={() => { if (k === '⌫') handleBack(); else if (k === '✓') handleSubmit(digits); else handleDigit(k); }}
                   activeOpacity={0.7}
                 >
                   <Text style={pin.kText}>{k}</Text>
@@ -188,6 +203,7 @@ function RootLayoutNav() {
       <Stack.Screen name="day-detail" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="image-view" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
       <Stack.Screen name="settings" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="pin-setup" options={{ animation: 'slide_from_right' }} />
     </Stack>
   );
 }
@@ -252,8 +268,15 @@ export default function RootLayout() {
 
     (async () => {
       // 0. OneSignal — داخل useEffect بعد تحميل React Native
+      //    تأخير بسيط لضمان تحميل الوحدات الأصلية
       if (Platform.OS !== 'web') {
-        try { initOneSignal(); } catch {}
+        try {
+          // تأخير 500م ث لضمان تحميل الوحدة الأصلية بالكامل
+          await new Promise(r => setTimeout(r, 500));
+          initOneSignal();
+        } catch (e) {
+          console.warn('[Layout] OneSignal init failed (non-critical):', e);
+        }
       }
 
       // 1. Crash guard
@@ -297,8 +320,18 @@ export default function RootLayout() {
       try {
         const seenRestore = await AsyncStorage.getItem('attendance_seen_restore_v1');
         if (!seenRestore) {
-          const dates = getAllDates();
-          if (dates.length === 0) setShowRestoreModal(true);
+          // تأكد من تهيئة قاعدة البيانات قبل قراءة التواريخ
+          try {
+            initDatabase();
+          } catch (dbErr) {
+            console.warn('[Layout] initDatabase failed in restore check:', dbErr);
+          }
+          try {
+            const dates = getAllDates();
+            if (dates.length === 0) setShowRestoreModal(true);
+          } catch (dateErr) {
+            console.warn('[Layout] getAllDates failed:', dateErr);
+          }
           await AsyncStorage.setItem('attendance_seen_restore_v1', '1');
         }
       } catch {}

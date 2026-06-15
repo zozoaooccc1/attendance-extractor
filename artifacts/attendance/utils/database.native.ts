@@ -33,35 +33,6 @@ function toSafe(v: unknown): string | number | null {
   try { return JSON.stringify(v); } catch { return null; }
 }
 
-// ─── TASK 2: Global safety guard — patches runSync on the database instance ──
-/**
- * Installs a one-time monkey-patch on the database's runSync method.
- * Even if a raw object bypasses safeRun() somehow, this last-resort guard
- * intercepts it, serializes it, and logs a warning before forwarding.
- */
-function installGlobalGuard(database: SQLite.SQLiteDatabase): void {
-  const proto = Object.getPrototypeOf(database) as any;
-  if (proto.__guardInstalled) return;
-
-  const original = proto.runSync as Function;
-  proto.runSync = function patchedRunSync(sql: string, params?: unknown) {
-    if (Array.isArray(params)) {
-      const hasUnsafe = params.some(
-        p => p !== null && typeof p === 'object' && !(p instanceof Date)
-      );
-      if (hasUnsafe) {
-        console.warn('[DB:globalGuard] ⚠️  Unsafe object intercepted and fixed at global guard layer');
-        params = (params as unknown[]).map(toSafe);
-      }
-    } else if (params !== null && params !== undefined && typeof params === 'object') {
-      console.warn('[DB:globalGuard] ⚠️  Unsafe object intercepted and fixed at global guard layer');
-      params = toSafe(params);
-    }
-    return original.call(this, sql, params);
-  };
-  proto.__guardInstalled = true;
-}
-
 // ─── TASK 1 + 3 + 4: safeRun — the mandatory call wrapper ───────────────────
 /**
  * MANDATORY SAFETY LAYER.
@@ -100,33 +71,51 @@ function safeRun(
 
 export function getDatabase(): SQLite.SQLiteDatabase {
   if (!db) {
-    db = SQLite.openDatabaseSync('attendance.db');
-    installGlobalGuard(db);
+    try {
+      db = SQLite.openDatabaseSync('attendance.db');
+    } catch (err) {
+      console.error('[DB] openDatabaseSync failed:', err);
+      // محاولة ثانية بعد مسح المرجع
+      db = null;
+      try {
+        db = SQLite.openDatabaseSync('attendance.db');
+      } catch (err2) {
+        console.error('[DB] openDatabaseSync retry also failed:', err2);
+        throw err2;
+      }
+    }
   }
   return db;
 }
 
 export function initDatabase(): void {
-  const database = getDatabase();
-  database.execSync(`
-    CREATE TABLE IF NOT EXISTS records (
-      id TEXT PRIMARY KEY,
-      date TEXT NOT NULL,
-      type TEXT NOT NULL,
-      shiftType TEXT NOT NULL,
-      imagePath TEXT NOT NULL,
-      ocrTime TEXT,
-      ocrConfidence REAL,
-      confirmedTime TEXT NOT NULL,
-      isManuallyEdited INTEGER NOT NULL DEFAULT 0,
-      isSynced INTEGER NOT NULL DEFAULT 1,
-      createdAt INTEGER NOT NULL,
-      note TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_records_date ON records(date);
-  `);
-  try { database.execSync(`ALTER TABLE records ADD COLUMN isSynced INTEGER DEFAULT 1`); } catch {}
-  try { database.execSync(`ALTER TABLE records ADD COLUMN note TEXT`); } catch {}
+  try {
+    const database = getDatabase();
+    database.execSync(`
+      CREATE TABLE IF NOT EXISTS records (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        shiftType TEXT NOT NULL,
+        imagePath TEXT NOT NULL,
+        ocrTime TEXT,
+        ocrConfidence REAL,
+        confirmedTime TEXT NOT NULL,
+        isManuallyEdited INTEGER NOT NULL DEFAULT 0,
+        isSynced INTEGER NOT NULL DEFAULT 1,
+        createdAt INTEGER NOT NULL,
+        note TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_records_date ON records(date);
+    `);
+    try { database.execSync(`ALTER TABLE records ADD COLUMN isSynced INTEGER DEFAULT 1`); } catch {}
+    try { database.execSync(`ALTER TABLE records ADD COLUMN note TEXT`); } catch {}
+  } catch (err) {
+    console.error('[DB] initDatabase failed:', err);
+    // إعادة تعيين المرجع لإعادة المحاولة لاحقاً
+    db = null;
+    throw err;
+  }
 }
 
 // ─── Write operations (all via safeRun) ─────────────────────────────────────
@@ -149,7 +138,7 @@ export function insertRecord(record: AttendanceRecord): void {
       record.isManuallyEdited,
       record.isSynced,
       record.createdAt,
-      record.note,
+      record.note || null,
     ],
     'insertRecord'
   );
@@ -160,7 +149,7 @@ export function updateRecordTime(id: string, confirmedTime: string, originalOcrT
   safeRun(
     database,
     `UPDATE records SET confirmedTime = ?, isManuallyEdited = 1, ocrTime = COALESCE(ocrTime, ?) WHERE id = ?`,
-    [confirmedTime, originalOcrTime, id],
+    [confirmedTime, originalOcrTime ?? null, id],
     'updateRecordTime'
   );
 }
@@ -172,7 +161,13 @@ export function updateRecordNote(id: string, note: string): void {
 
 export function deleteRecordById(id: string): string | null {
   const database = getDatabase();
-  const row = database.getFirstSync<{ imagePath: string }>(`SELECT imagePath FROM records WHERE id = ?`, [id]);
+  const row = safeQuery<{ imagePath: string }>(
+    database,
+    `SELECT imagePath FROM records WHERE id = ?`,
+    [id],
+    'first',
+    'deleteRecordById:select'
+  );
   if (!row) return null;
   safeRun(database, `DELETE FROM records WHERE id = ?`, [id], 'deleteRecordById');
   return row.imagePath;
@@ -180,35 +175,90 @@ export function deleteRecordById(id: string): string | null {
 
 export function deleteRecordsBeforeDate(beforeDateStr: string): string[] {
   const database = getDatabase();
-  const rows = database.getAllSync<{ imagePath: string }>(
-    `SELECT imagePath FROM records WHERE date < ?`, [beforeDateStr]
+  const rows = safeQuery<{ imagePath: string }[]>(
+    database,
+    `SELECT imagePath FROM records WHERE date < ?`,
+    [beforeDateStr],
+    'all',
+    'deleteRecordsBeforeDate:select'
   );
   safeRun(database, `DELETE FROM records WHERE date < ?`, [beforeDateStr], 'deleteRecordsBeforeDate');
-  return rows.map(r => r.imagePath);
+  return (rows ?? []).map(r => r.imagePath);
 }
 
-// ─── Read operations ─────────────────────────────────────────────────────────
+// ─── TASK 4: safeQuery — the mandatory READ wrapper ──────────────────────────
+/**
+ * MANDATORY SAFETY LAYER for READ operations.
+ * Every read from SQLite MUST go through safeQuery().
+ *
+ * Same sanitization as safeRun but for getFirstSync / getAllSync.
+ * Prevents Kotlin JSI bridge crashes from non-primitive values.
+ */
+function safeQuery<T = any>(
+  database: SQLite.SQLiteDatabase,
+  sql: string,
+  params: unknown[],
+  mode: 'first' | 'all',
+  caller = 'unknown'
+): T | null {
+  const hasUnsafe = params.some(
+    p => p !== null && p !== undefined && typeof p === 'object' && !(p instanceof Date)
+  );
+  if (hasUnsafe) {
+    dbLog('warn', caller, params);
+  } else if (__DEV_DB__) {
+    dbLog('info', caller, params);
+  }
+
+  const safe = params.map(toSafe) as SQLite.SQLiteBindParams;
+
+  try {
+    if (mode === 'first') {
+      return database.getFirstSync<T>(sql, safe);
+    }
+    return database.getAllSync<T>(sql, safe) as unknown as T;
+  } catch (err) {
+    console.error(`[DB:safeQuery][${caller}] ${mode}Sync error after sanitization:`, err);
+    if (mode === 'first') return null;
+    return [] as unknown as T;
+  }
+}
+
+// ─── Read operations (all via safeQuery) ─────────────────────────────────────
 
 export function getRecordsByDate(date: string): AttendanceRecord[] {
   const database = getDatabase();
-  const rows = database.getAllSync<any>(
+  const rows = safeQuery<any[]>(
+    database,
     `SELECT * FROM records WHERE date = ? ORDER BY createdAt ASC`,
-    [date]
+    [date],
+    'all',
+    'getRecordsByDate'
   );
-  return rows.map(rowToRecord);
+  return (rows ?? []).map(rowToRecord);
 }
 
 export function getAllDates(): string[] {
   const database = getDatabase();
-  const rows = database.getAllSync<{ date: string }>(
-    `SELECT DISTINCT date FROM records ORDER BY date DESC`
+  const rows = safeQuery<{ date: string }[]>(
+    database,
+    `SELECT DISTINCT date FROM records ORDER BY date DESC`,
+    [],
+    'all',
+    'getAllDates'
   );
-  return rows.map(r => r.date);
+  return (rows ?? []).map(r => r.date);
 }
 
 export function getRecordById(id: string): AttendanceRecord | null {
   const database = getDatabase();
-  const row = database.getFirstSync<any>(`SELECT * FROM records WHERE id = ?`, [id]);
+  const row = safeQuery<any>(
+    database,
+    `SELECT * FROM records WHERE id = ?`,
+    [id],
+    'first',
+    'getRecordById'
+  );
   if (!row) return null;
   return rowToRecord(row);
 }
@@ -216,20 +266,26 @@ export function getRecordById(id: string): AttendanceRecord | null {
 export function getRecordsByMonth(year: number, month: number): AttendanceRecord[] {
   const database = getDatabase();
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
-  const rows = database.getAllSync<any>(
+  const rows = safeQuery<any[]>(
+    database,
     `SELECT * FROM records WHERE date LIKE ? ORDER BY date ASC, createdAt ASC`,
-    [`${prefix}%`]
+    [`${prefix}%`],
+    'all',
+    'getRecordsByMonth'
   );
-  return rows.map(rowToRecord);
+  return (rows ?? []).map(rowToRecord);
 }
 
 export function getRecordsByDateRange(startDate: string, endDate: string): AttendanceRecord[] {
   const database = getDatabase();
-  const rows = database.getAllSync<any>(
+  const rows = safeQuery<any[]>(
+    database,
     `SELECT * FROM records WHERE date >= ? AND date <= ? ORDER BY date ASC, createdAt ASC`,
-    [startDate, endDate]
+    [startDate, endDate],
+    'all',
+    'getRecordsByDateRange'
   );
-  return rows.map(rowToRecord);
+  return (rows ?? []).map(rowToRecord);
 }
 
 // ─── Row mapper ──────────────────────────────────────────────────────────────
@@ -245,8 +301,8 @@ function rowToRecord(row: any): AttendanceRecord {
     ocrConfidence: row.ocrConfidence,
     confirmedTime: row.confirmedTime,
     isManuallyEdited: row.isManuallyEdited === 1,
-    isSynced: row.isSynced !== 0,
+    isSynced: row.isSynced === 1,
     createdAt: row.createdAt,
-    note: row.note ?? undefined,
+    note: row.note || undefined,
   };
 }

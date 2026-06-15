@@ -7,6 +7,61 @@ export interface ChangelogItem {
 
 const changelog: ChangelogItem[] = [
   {
+    version: '3.3.0',
+    title: 'إصلاح الكراش الحرج عند بدء التشغيل',
+    date: '2026-06-15',
+    items: [
+      { type: 'fix',     text: 'إضافة Reanimated Babel plugin — أساسي لعمل الـ animations والـ worklets' },
+      { type: 'fix',     text: 'إزالة babel-plugin-react-compiler — سبب تعارض مع Reanimated وكراش فوري' },
+      { type: 'fix',     text: 'منع إعادة رمي الأخطاء الفادحة في GlobalHandler — يمنع إغلاق التطبيق فوراً' },
+      { type: 'fix',     text: 'تحسين معالجة أخطاء قاعدة البيانات في AttendanceContext' },
+      { type: 'fix',     text: 'إعادة محاولة فتح قاعدة البيانات عند الفشل الأول' },
+      { type: 'improve', text: 'تغليف أفضل لعمليات initDatabase و getAllDates' },
+    ],
+  },
+  {
+    title: 'إصلاح الكراش الحرج',
+    date: '2026-06-15',
+    items: [
+      { type: 'fix',     text: 'إصلاح كراش Kotlin bridge في عمليات قراءة SQLite' },
+      { type: 'fix',     text: 'حماية جميع استعلامات القراءة بـ safeQuery' },
+      { type: 'fix',     text: 'إصلاح كراش عند تمرير مصفوفات كمعاملات مسار' },
+      { type: 'fix',     text: 'تعطيل React Compiler — سبب كراش فوري عند التشغيل' },
+      { type: 'fix',     text: 'تعطيل New Architecture — عدم توافق مع بعض الوحدات الأصلية' },
+      { type: 'fix',     text: 'إصلاح استدعاء setupNotificationHandler على الويب' },
+      { type: 'fix',     text: 'إضافة التصديرات المفقودة في نسخة الويب' },
+      { type: 'improve', text: 'ترجمة تبويب الموظف في شريط التنقل' },
+    ],
+  },
+  {
+    version: '3.2.0',
+    title: 'نظام التحديثات عبر EAS وإصلاحات',
+    date: '2026-06-15',
+    items: [
+      { type: 'new',     text: 'نظام تحديثات جديد يعتمد على EAS بالكامل' },
+      { type: 'fix',     text: 'إصلاح كراش عند ترك ملاحظة فارغة' },
+      { type: 'fix',     text: 'إصلاح تكرار مفاتيح الترجمة' },
+      { type: 'improve', text: 'تحسين موثوقية التحقق من التحديثات' },
+    ],
+  },
+  {
+    version: '3.1.8',
+    title: 'إصلاحات شاملة للأخطاء',
+    date: '2026-06-15',
+    items: [
+      { type: 'fix',     text: 'إصلاح تعارض تنسيق بيانات الإنجازات' },
+      { type: 'fix',     text: 'إصلاح حالة السباق في حفظ بيانات الموظف والإعدادات' },
+      { type: 'fix',     text: 'إصلاح حساب الفترة عند بقاء التطبيق مفتوحاً' },
+      { type: 'fix',     text: 'إصلاح خطأ التوقيت الصيفي في حساب أطول سلسلة' },
+      { type: 'fix',     text: 'إصلاح حساب حجم النسخ الاحتياطي' },
+      { type: 'fix',     text: 'تحسين تجزئة رمز PIN بإضافة ملح وتكرار' },
+      { type: 'fix',     text: 'إصلاح إمكانية تحقيق إنجاز "أسبوع بلا تأخر"' },
+      { type: 'fix',     text: 'إضافة تصديرات مفقودة في نسخة الويب' },
+      { type: 'improve', text: 'تطابق حالة اللغة بين السياقات' },
+      { type: 'improve', text: 'تحسين معالجة الأخطاء عبر التطبيق' },
+    ],
+  },
+  {
     version: '3.1.5',
     title: 'إصلاح 5 مشاكل',
     date: '2026-06-13',
@@ -116,4 +171,4 @@ export function getLatestChangelog(): ChangelogItem | null {
   return changelog[0] ?? null;
 }
 
-export const CURRENT_VERSION = '3.1.5';
+export const CURRENT_VERSION = '3.3.0';
