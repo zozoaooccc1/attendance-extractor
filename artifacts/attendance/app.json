@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "attendance",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "extra": {
       "eas": {
         "projectId": "78fd6a87-9790-45cd-ab2c-7e24937757e9"
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.attendance.app",
-      "versionCode": 47,
+      "versionCode": 48,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
