@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.attendance.app",
-      "versionCode": 46,
+      "versionCode": 47,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -49,12 +49,7 @@
       ],
       "expo-font",
       "expo-web-browser",
-      [
-        "onesignal-expo-plugin",
-        {
-          "mode": "production"
-        }
-      ]
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
