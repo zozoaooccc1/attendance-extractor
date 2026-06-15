@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "attendance",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "extra": {
       "eas": {
         "projectId": "6c86f18d-eec0-489a-b4c8-9d2b8d678606"
@@ -57,8 +57,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": false
+      "typedRoutes": true
     }
   }
 }
