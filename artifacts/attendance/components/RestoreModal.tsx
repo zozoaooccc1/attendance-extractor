@@ -20,10 +20,15 @@ export function RestoreModal({ visible, onRestore, onSkip }: Props) {
 
   const handleRestore = async () => {
     setLoading(true);
-    await onRestore();
-    setLoading(false);
-    setDone(true);
-    setTimeout(() => setDone(false), 2000);
+    try {
+      await onRestore();
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    } catch (err) {
+      setDone(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

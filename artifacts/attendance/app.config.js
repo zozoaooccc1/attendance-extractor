@@ -12,6 +12,8 @@ export default {
   extra: {
     ...appJson.expo.extra,
     appVariant: IS_DEV ? 'development' : 'production',
-    expoToken: process.env.EXPO_TOKEN ?? '',
+    // توكن EAS لفحص التحديثات — يُضمَّن وقت البناء فقط
+    // يقرأ من EXPO_TOKEN (السر المحفوظ في EAS Secrets)
+    easUpdateToken: process.env.EXPO_TOKEN ?? process.env.EAS_UPDATE_TOKEN ?? '',
   },
 };

@@ -9,6 +9,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { useSettings } from '@/context/SettingsContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -20,7 +21,9 @@ function clamp(val: number, min: number, max: number): number {
 export default function ImageViewScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { uri } = useLocalSearchParams<{ uri: string }>();
+  const rawParams = useLocalSearchParams<{ uri: string }>();
+  const uri = Array.isArray(rawParams.uri) ? rawParams.uri[0] : rawParams.uri;
+  const { isRTL } = useSettings();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
   const scale = useSharedValue(1);
@@ -97,7 +100,7 @@ export default function ImageViewScreen() {
 
       <View style={[styles.labelBadge, { top: topPad + 12 }]}>
         <Ionicons name="shield-checkmark" size={14} color="#fff" />
-        <Text style={styles.labelText}>الصورة الأصلية</Text>
+        <Text style={styles.labelText}>{isRTL ? 'الصورة الأصلية' : 'Original Photo'}</Text>
       </View>
 
       <GestureDetector gesture={doubleTap}>
@@ -112,7 +115,7 @@ export default function ImageViewScreen() {
             ) : (
               <View style={styles.noImage}>
                 <Ionicons name="image-outline" size={60} color="#555" />
-                <Text style={{ color: '#555', marginTop: 12 }}>لا توجد صورة</Text>
+                <Text style={{ color: '#555', marginTop: 12 }}>{isRTL ? 'لا توجد صورة' : 'No image'}</Text>
               </View>
             )}
           </Animated.View>
@@ -120,7 +123,7 @@ export default function ImageViewScreen() {
       </GestureDetector>
 
       <View style={[styles.hintBar, { bottom: insets.bottom + 16 }]}>
-        <Text style={styles.hintText}>قرّب بإصبعين • اضغط مرتين للتكبير/التصغير</Text>
+        <Text style={styles.hintText}>{isRTL ? 'قرّب بإصبعين • اضغط مرتين للتكبير/التصغير' : 'Pinch to zoom • Double tap to zoom in/out'}</Text>
       </View>
     </View>
   );

@@ -1,5 +1,7 @@
 import { ShiftType } from '@/constants/types';
 
+export function setupNotificationHandler(): void {}
+export async function scheduleAlarmBurst(_shiftType: ShiftType): Promise<void> {}
 export async function requestNotificationPermissions(): Promise<boolean> { return false; }
 export async function scheduleSingleShiftReminders(): Promise<void> {}
 export async function scheduleDoubleShiftReminders(): Promise<void> {}

@@ -24,7 +24,7 @@ const CAMERA_GUIDE_KEY = 'attendance_camera_guide_v1';
 const MIN_IMAGE_SIZE_BYTES = 15000;
 
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 11);
 }
 
 type CaptureStep = 'camera' | 'fetching' | 'confirm' | 'success';
@@ -90,6 +90,7 @@ export default function CaptureScreen() {
 
 
   const progressRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const navTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successOpacity = useRef(new Animated.Value(0)).current;
   const successScale   = useRef(new Animated.Value(0.5)).current;
 
@@ -111,10 +112,17 @@ export default function CaptureScreen() {
       Animated.timing(successOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
       Animated.spring(successScale, { toValue: 1, useNativeDriver: true, damping: 12, stiffness: 200 }),
     ]).start();
-    setTimeout(() => {
+    navTimeoutRef.current = setTimeout(() => {
       Animated.timing(successOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => router.back());
     }, 1100);
   };
+
+  // تنظيف المؤقتات عند إزالة المكون
+  useEffect(() => {
+    return () => {
+      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+    };
+  }, []);
 
   const checkAndLaunchCamera = async () => {
     try {
@@ -159,8 +167,8 @@ export default function CaptureScreen() {
             const info = await FileSystem.getInfoAsync(uri);
             const size = (info.exists && 'size' in info) ? (info as any).size : 999999;
             if (size < MIN_IMAGE_SIZE_BYTES) {
-              Alert.alert('⚠️ جودة الصورة منخفضة', 'الصورة تبدو مظلمة أو ضبابية جداً. يُنصح بإعادة التصوير في مكان أكثر إضاءة.',
-                [{ text: '📷 إعادة التصوير', style: 'cancel', onPress: () => launchCamera() }, { text: 'استخدام الصورة', onPress: () => continueWithImage(uri) }]);
+              Alert.alert(t.capture.lowQualityTitle, t.capture.lowQualityMsg,
+                [{ text: t.capture.retake, style: 'cancel', onPress: () => launchCamera() }, { text: t.capture.useAnyway, onPress: () => continueWithImage(uri) }]);
               return;
             }
           } catch {}
@@ -191,7 +199,7 @@ export default function CaptureScreen() {
         imagePath: savedPath, ocrTime: officialTime.displayTime, ocrConfidence: 100,
         confirmedTime: finalTime, isManuallyEdited: false,
         isSynced: officialTime.isSynced, createdAt: officialTime.time instanceof Date ? officialTime.time.getTime() : Number(officialTime.time),
-        note: note.trim() || undefined,
+        note: note.trim() || '',
       });
 
       const isEntry = (type as string) === 'entry1' || (type as string) === 'entry2';
@@ -307,7 +315,7 @@ export default function CaptureScreen() {
           <View style={[styles.warnBox, { backgroundColor: colors.warningBg, borderColor: colors.warning + '44' }]}>
             <Ionicons name="alert-circle-outline" size={moderateScale(14)} color={colors.warning} />
             <Text style={[styles.warnText, { color: colors.warning }]}>
-              لا يوجد إنترنت — يُعلَّم السجل كـ «غير مزامن»
+            {isSynced ? t.recordDetail.syncedNote : t.capture.unsyncedWarning}
             </Text>
           </View>
         )}
@@ -319,12 +327,12 @@ export default function CaptureScreen() {
         <View style={styles.noteLabelRow}>
           <Ionicons name="create-outline" size={moderateScale(16)} color={colors.mutedForeground} />
           <Text style={[styles.noteLabel, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
-            ملاحظة (اختياري)
+            {t.capture.noteOptional}
           </Text>
         </View>
         <TextInput
           style={[styles.noteInput, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
-          placeholder="أضف ملاحظة على هذا السجل..."
+          placeholder={t.capture.notePlaceholder}
           placeholderTextColor={colors.mutedForeground + '80'}
           value={note} onChangeText={setNote}
           multiline maxLength={200} textAlignVertical="top"

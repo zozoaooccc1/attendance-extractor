@@ -18,7 +18,8 @@ export default function RecordDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const rawParams = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(rawParams.id) ? rawParams.id[0] : rawParams.id;
   const { deleteRecord } = useAttendance();
   const { fontMultiplier } = useSettings();
 

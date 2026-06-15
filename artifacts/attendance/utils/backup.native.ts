@@ -1,23 +1,31 @@
 import * as FileSystem from 'expo-file-system';
 import LZString from 'lz-string';
 import { getAllDates, getRecordsByDate, insertRecord } from './database';
+import { AttendanceRecord } from '@/constants/types';
 import { IMAGES_DIR, readImageAsBase64, writeImageFromBase64 } from './imageStorage';
 
 export const BACKUP_FILENAME      = 'attendance_backup_v2.lzb';
 export const BACKUP_FULL_FILENAME = 'attendance_backup_full_v1.lzb';
 export const BACKUP_KEY_DATE      = 'attendance_backup_last_date';
-export const INTERNAL_BACKUP_PATH = `${FileSystem.documentDirectory}${BACKUP_FILENAME}`;
+export const INTERNAL_BACKUP_PATH = (FileSystem.documentDirectory ?? '') + BACKUP_FILENAME;
+
+function validateDocumentDir(): string {
+  if (!FileSystem.documentDirectory) {
+    throw new Error('FileSystem.documentDirectory غير متاح على هذا الجهاز');
+  }
+  return FileSystem.documentDirectory;
+}
 
 export interface BackupData {
   version: string;
   exportedAt: string;
-  records: any[];
+  records: AttendanceRecord[];
   images?: Record<string, string>; // recordId → base64 (only in full backup)
 }
 
 function collectAllRecords(): any[] {
   const dates = getAllDates();
-  const records: any[] = [];
+  const records: AttendanceRecord[] = [];
   for (const date of dates) records.push(...getRecordsByDate(date));
   return records;
 }
@@ -67,7 +75,7 @@ export async function getInternalBackupInfo(): Promise<{
     const raw = await FileSystem.readAsStringAsync(INTERNAL_BACKUP_PATH, {
       encoding: FileSystem.EncodingType.UTF8,
     });
-    const sizeKB = Math.round((raw.length * 0.75) / 1024);
+    const sizeKB = Math.round(raw.length / 1024);
     const data = decompress(raw);
     return { exists: true, date: data.exportedAt, count: data.records?.length ?? 0, sizeKB };
   } catch {

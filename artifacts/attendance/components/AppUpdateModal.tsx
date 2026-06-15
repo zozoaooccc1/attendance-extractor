@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, StyleSheet,
   Linking, ScrollView, Platform, ActivityIndicator,
@@ -31,6 +31,16 @@ export function AppUpdateModal({ visible, info, onDismiss }: Props) {
   const [progress, setProgress]       = useState(0);
   const [errorMsg, setErrorMsg]       = useState('');
   const [localApkUri, setLocalApkUri] = useState<string | null>(null);
+
+  // إعادة تعيين الحالة عند إغلاق المودال أو تغيير الإصدار
+  useEffect(() => {
+    if (!visible) {
+      setPhase('idle');
+      setProgress(0);
+      setErrorMsg('');
+      setLocalApkUri(null);
+    }
+  }, [visible]);
 
   if (!info) return null;
 

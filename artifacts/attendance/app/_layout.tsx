@@ -13,7 +13,7 @@ import {
   AppStateStatus, Alert, Modal,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
+// KeyboardProvider removed — not compatible with current EAS build
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -419,13 +419,11 @@ export default function RootLayout() {
             <ErrorBoundary>
               <QueryClientProvider client={queryClient}>
                 <GestureHandlerRootView style={{ flex: 1 }}>
-                  <KeyboardProvider>
-                    <AttendanceProvider>
+                  <AttendanceProvider>
                       <EmployeeProvider>
                         <SettingsGate />
                       </EmployeeProvider>
                     </AttendanceProvider>
-                  </KeyboardProvider>
                 </GestureHandlerRootView>
               </QueryClientProvider>
             </ErrorBoundary>

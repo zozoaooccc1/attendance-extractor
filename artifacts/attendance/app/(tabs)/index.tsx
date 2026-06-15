@@ -102,7 +102,6 @@ export default function TodayScreen() {
   const [entryCountdown, setEntryCountdown] = useState('');
   const [entryTargetLabel, setEntryTargetLabel] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(true);
-  const [monthLateCount, setMonthLateCount] = useState(0);
 
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
 
@@ -137,7 +136,7 @@ export default function TodayScreen() {
   }, [isFriday, shiftType]);
 
   // Feature 3: Count late entries this month
-  useEffect(() => {
+  const monthLateCount = useMemo(() => {
     try {
       const n = new Date();
       const records = getRecordForMonth(n.getFullYear(), n.getMonth() + 1);
@@ -148,9 +147,9 @@ export default function TodayScreen() {
           if (isLate) lateCount++;
         }
       }
-      setMonthLateCount(lateCount);
-    } catch {}
-  }, [todayRecords]);
+      return lateCount;
+    } catch { return 0; }
+  }, [todayRecords, getRecordForMonth]);
 
   const sorted = [...todayRecords].sort((a, b) => RECORD_ORDER.indexOf(a.type) - RECORD_ORDER.indexOf(b.type));
   const get = (t: RecordType) => sorted.find(r => r.type === t);

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Language, AppTranslations, translations, RTL_LANGUAGES } from '@/i18n/index';
 
@@ -54,6 +54,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [maxStorageMB,     setMSMB] = useState<number>(1000);
   const [settingsLoaded,   setSL]  = useState(false);
 
+  // طابور كتابة متسلسل لمنع حالة السباق
+  const persistQueue = useRef(Promise.resolve());
+
   useEffect(() => {
     AsyncStorage.multiGet([KEY, LANG_KEY]).then(pairs => {
       const settingsStr = pairs[0][1];
@@ -73,18 +76,35 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           if (typeof s.alarmBeforeShift === 'boolean') setABS(s.alarmBeforeShift);
 
           if (typeof s.maxStorageMB     === 'number')  setMSMB(s.maxStorageMB);
-        } catch {}
+
+          // دعم اللغة من الإعدادات القديمة أيضاً
+          if (s.language === 'ar' || s.language === 'en') setLang(s.language);
+        } catch (e) {
+          console.warn('[SettingsContext] Failed to parse settings:', e);
+        }
       }
       if (langStr === 'ar' || langStr === 'en') setLang(langStr);
+      setSL(true);
+    }).catch(e => {
+      console.warn('[SettingsContext] Failed to load settings:', e);
       setSL(true);
     });
   }, []);
 
+  /**
+   * persist متسلسل: كل كتابة تنتظر الكتابة السابقة
+   * لمنع فقدان البيانات عند استدعاء عدة setters بسرعة.
+   */
   const persist = useCallback((patch: object) => {
-    AsyncStorage.getItem(KEY).then(v => {
-      const cur = v ? JSON.parse(v) : {};
-      AsyncStorage.setItem(KEY, JSON.stringify({ ...cur, ...patch }));
-    });
+    persistQueue.current = persistQueue.current
+      .then(() => AsyncStorage.getItem(KEY))
+      .then(v => {
+        const cur = v ? JSON.parse(v) : {};
+        return AsyncStorage.setItem(KEY, JSON.stringify({ ...cur, ...patch }));
+      })
+      .catch(e => {
+        console.warn('[SettingsContext] Persist error:', e);
+      });
   }, []);
 
   const setTimeFormat      = useCallback((f: TimeFormat) => { setTF(f);   persist({ timeFormat: f }); }, [persist]);
@@ -102,9 +122,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setHighContrast     = useCallback((v: boolean) => { setHC(v);   persist({ highContrast: v });     }, [persist]);
   const setEarlyReminder    = useCallback((v: boolean) => { setER(v);   persist({ earlyReminder: v });    }, [persist]);
   const setAlarmBeforeShift = useCallback((v: boolean) => { setABS(v);  persist({ alarmBeforeShift: v }); }, [persist]);
-  const setLanguage         = useCallback((l: Language) => { setLang(l); AsyncStorage.setItem(LANG_KEY, l); }, []);
+  const setLanguage         = useCallback((l: Language) => {
+    setLang(l);
+    // حفظ اللغة في كلا المفتاحين لضمان الاتساق
+    persist({ language: l });
+    AsyncStorage.setItem(LANG_KEY, l).catch(e => {
+      console.warn('[SettingsContext] Failed to save language key:', e);
+    });
+  }, [persist]);
 
-  const setMaxStorageMB     = useCallback((mb: number) => { setMSMB(mb); persist({ maxStorageMB: mb }); }, [persist]);
+  const setMaxStorageMB     = useCallback((mb: number) => {
+    const clamped = Math.max(50, Math.min(10000, mb));
+    setMSMB(clamped);
+    persist({ maxStorageMB: clamped });
+  }, [persist]);
 
   const t = translations[language];
 

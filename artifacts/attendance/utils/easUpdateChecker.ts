@@ -1,18 +1,21 @@
 /**
  * easUpdateChecker.ts
  * ───────────────────
- * يفحص EAS مباشرةً للتحقق من وجود APK أحدث.
- * يستخدم Expo GraphQL API — يقرأ التوكن من app.config.js extra.
+ * يفحص EAS GraphQL API للتحقق من وجود بناء APK أحدث.
  *
- * لإعداد التوكن في بيئة البناء:
- *   eas secret:create --scope project --name EXPO_TOKEN --value <your-token>
+ * آلية العمل:
+ * 1. يقرأ التوكن من Constants.expoConfig.extra.easUpdateToken
+ *    (يُضمَّن تلقائياً وقت البناء من EAS_UPDATE_TOKEN)
+ * 2. يستعلم عن آخر بناء مكتمل على EAS
+ * 3. يقارن الإصدار بالإصدار الحالي
+ * 4. يُرجع معلومات التحديث إن وُجد إصدار أحدث
  */
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const EAS_API      = 'https://api.expo.dev/graphql';
-const PROJECT_ID   = 'e0d07504-ef8f-4a60-9ce3-92694b0d6804';
-const SNOOZE_KEY   = 'apk_update_snoozed_eas_v';
+const EAS_API    = 'https://api.expo.dev/graphql';
+const PROJECT_ID = '6c86f18d-eec0-489a-b4c8-9d2b8d678606';
+const SNOOZE_KEY = 'apk_update_snoozed_v_';
 
 export interface AppUpdateInfo {
   version: string;
@@ -48,7 +51,7 @@ function formatArabicDate(isoStr: string): string {
 export async function checkForAppUpdate(force = false): Promise<AppUpdateInfo | null> {
   try {
     const currentVersion = Constants.expoConfig?.version ?? '0.0.0';
-    const token: string  = (Constants.expoConfig?.extra?.expoToken as string) ?? '';
+    const token: string  = (Constants.expoConfig?.extra?.easUpdateToken as string) ?? '';
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;

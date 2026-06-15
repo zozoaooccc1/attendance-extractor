@@ -52,7 +52,7 @@ function FloatingTabBar({ state, navigation, isDark, activeColor, inactiveColor,
   const isIOS = Platform.OS === 'ios';
   const isNative = Platform.OS !== 'web';
   const { t } = useSettings();
-  const TAB_LABELS = ['الموظف', t.tabs.today, t.tabs.history, t.tabs.calendar, t.tabs.reports];
+  const TAB_LABELS = [t.tabs.employee, t.tabs.today, t.tabs.history, t.tabs.calendar, t.tabs.reports];
 
   const indicatorX = useRef(new Animated.Value(state.index * TAB_W + INDICATOR_INSET)).current;
   const scaleAnims = useRef(

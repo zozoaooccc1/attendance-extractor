@@ -11,23 +11,21 @@ import { useSettings } from '@/context/SettingsContext';
 import { AttendanceRecord, RecordType, RECORD_LABELS, RECORD_ORDER } from '@/constants/types';
 import { moderateScale, clampFont, spacing, buildFontSize } from '@/utils/responsive';
 
-const ARABIC_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-const ARABIC_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-
 export default function DayDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { date } = useLocalSearchParams<{ date: string }>();
+  const rawParams = useLocalSearchParams<{ date: string }>();
+  const date = Array.isArray(rawParams.date) ? rawParams.date[0] : rawParams.date;
   const { getRecordForDate } = useAttendance();
-  const { fontMultiplier } = useSettings();
+  const { fontMultiplier, t, isRTL } = useSettings();
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
 
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
 
   useEffect(() => {
     if (date) setRecords(getRecordForDate(date));
-  }, [date]);
+  }, [date, getRecordForDate]);
 
   const d = date ? (() => {
     const [y, m, day] = date.split('-').map(Number);
@@ -38,6 +36,10 @@ export default function DayDetailScreen() {
   const types: RecordType[] = shiftType === 'double' ? RECORD_ORDER : ['entry1', 'exit1'];
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
+
+  // استخدام أسماء الأيام والأشهر من i18n
+  const days = t.days;
+  const months = t.months;
 
   return (
     <ScrollView
@@ -51,10 +53,10 @@ export default function DayDetailScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerDate, { color: colors.foreground, fontFamily: 'Inter_700Bold' }]}>
-            {`${d.getDate()} ${ARABIC_MONTHS[d.getMonth()]} ${d.getFullYear()}`}
+            {`${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`}
           </Text>
           <Text style={[styles.headerDay, { color: colors.mutedForeground }]}>
-            {ARABIC_DAYS[d.getDay()]}
+            {days[d.getDay()]}
           </Text>
         </View>
         <View style={{ width: moderateScale(40) }} />
@@ -97,11 +99,11 @@ export default function DayDetailScreen() {
                   <Text style={[styles.confLabel, {
                     color: rec.isManuallyEdited ? colors.primary : (rec.ocrConfidence ?? 0) >= 80 ? colors.success : colors.warning
                   }]}>
-                    {rec.isManuallyEdited ? 'يدوي' : (rec.ocrConfidence ?? 0) >= 80 ? 'ثقة عالية' : 'مراجعة'}
+                    {rec.isManuallyEdited ? t.dayDetail.manual : (rec.ocrConfidence ?? 0) >= 80 ? t.dayDetail.highConf : t.dayDetail.review}
                   </Text>
                 </View>
               ) : (
-                <Text style={[styles.noRecord, { color: colors.mutedForeground }]}>لا يوجد سجل</Text>
+                <Text style={[styles.noRecord, { color: colors.mutedForeground }]}>{t.calendar.noRecord}</Text>
               )}
             </View>
 
@@ -113,7 +115,7 @@ export default function DayDetailScreen() {
       {records.length === 0 && (
         <View style={styles.empty}>
           <Ionicons name="calendar-outline" size={moderateScale(44)} color={colors.mutedForeground} />
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>لا توجد سجلات لهذا اليوم</Text>
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{t.dayDetail.noRecords}</Text>
         </View>
       )}
     </ScrollView>

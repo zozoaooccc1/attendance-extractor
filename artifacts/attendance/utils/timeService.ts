@@ -21,7 +21,7 @@ async function tryFetchTime(url: string, parse: (data: any) => Date, timeoutMs: 
 }
 
 export async function getOfficialTime(timeoutMs = 5000): Promise<OfficialTime> {
-  const perServer = Math.floor(timeoutMs / 3);
+  const startTime = Date.now();
 
   const sources: Array<{ url: string; parse: (data: any) => Date }> = [
     {
@@ -39,8 +39,12 @@ export async function getOfficialTime(timeoutMs = 5000): Promise<OfficialTime> {
   ];
 
   for (const src of sources) {
+    const elapsed = Date.now() - startTime;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break; // انتهى الوقت الإجمالي
+
     try {
-      const time = await tryFetchTime(src.url, src.parse, perServer);
+      const time = await tryFetchTime(src.url, src.parse, remaining);
       if (isNaN(time.getTime())) throw new Error('invalid date');
       return {
         time,

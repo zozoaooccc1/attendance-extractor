@@ -19,8 +19,6 @@ export function setupNotificationHandler(): void {
   } catch {}
 }
 
-setupNotificationHandler();
-
 // ── Android channels ──────────────────────────────────────────────────────────
 async function ensureChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
@@ -208,7 +206,7 @@ export async function scheduleSingleShiftReminders(earlyMinutes = 0): Promise<vo
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour: 12,
-        minute: 0,
+        minute: 5, // 5 دقائق بعد موعد الدخول، قبل نهاية السماح (12:15)
       },
     });
 
@@ -268,7 +266,7 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour: 9,
-        minute: 0,
+        minute: 5, // 5 دقائق بعد موعد الدخول، قبل نهاية السماح (9:15)
       },
     });
 
@@ -312,7 +310,7 @@ export async function scheduleDoubleShiftReminders(earlyMinutes = 0): Promise<vo
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour: 16,
-        minute: 0,
+        minute: 5, // 5 دقائق بعد موعد الدخول، قبل نهاية السماح (16:15)
       },
     });
 
@@ -340,6 +338,8 @@ export async function schedulePersistentReminders(intervalHours = 2): Promise<vo
   try {
     setupNotificationHandler();
     await ensureChannels();
+    // إلغاء التذكيرات المستمرة القديمة أولاً
+    await cancelAllAttendanceReminders();
     const channel = Platform.OS === 'android' ? 'attendance-reminders' : undefined;
     await Notifications.scheduleNotificationAsync({
       content: {

@@ -28,7 +28,7 @@ export default function CalendarScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { getRecordForDate } = useAttendance();
+  const { getRecordForDate, getRecordForMonth } = useAttendance();
   const { fontMultiplier, t } = useSettings();
   const { width: screenW } = useWindowDimensions();
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -46,14 +46,21 @@ export default function CalendarScreen() {
   const [dayMap, setDayMap] = useState<Record<string, AttendanceRecord[]>>({});
 
   const loadMonth = useCallback(() => {
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const monthRecords = getRecordForMonth(year, month + 1);
     const map: Record<string, AttendanceRecord[]> = {};
+    // تجميع السجلات حسب التاريخ في الذاكرة بدلاً من استعلام كل يوم على حدة
+    for (const r of monthRecords) {
+      if (!map[r.date]) map[r.date] = [];
+      map[r.date].push(r);
+    }
+    // ملء الأيام بدون سجلات بمصفوفة فارغة
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     for (let d = 1; d <= daysInMonth; d++) {
       const key = dateStr(year, month, d);
-      map[key] = getRecordForDate(key);
+      if (!map[key]) map[key] = [];
     }
     setDayMap(map);
-  }, [year, month, getRecordForDate]);
+  }, [year, month, getRecordForMonth]);
 
   useFocusEffect(useCallback(() => { loadMonth(); }, [loadMonth]));
 

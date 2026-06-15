@@ -22,7 +22,7 @@ export interface AppTranslations {
 
   recordTypes: { entry1: string; exit1: string; entry2: string; exit2: string };
 
-  tabs: { today: string; history: string; calendar: string; reports: string };
+  tabs: { employee: string; today: string; history: string; calendar: string; reports: string };
 
   today: {
     companyPeriod: string;
@@ -170,6 +170,11 @@ export interface AppTranslations {
     cameraError: string;
     saveError: string;
     success: string;
+    lowQualityTitle: string;
+    lowQualityMsg: string;
+    useAnyway: string;
+    unsyncedWarning: string;
+    noteOptional: string;
   };
 
   recordDetail: {
@@ -272,7 +277,7 @@ const ar: AppTranslations = {
 
   recordTypes: { entry1: 'دخول', exit1: 'خروج', entry2: 'دخول 2', exit2: 'خروج 2' },
 
-  tabs: { today: 'اليوم', history: 'السجل', calendar: 'التقويم', reports: 'التقارير' },
+  tabs: { employee: 'الموظف', today: 'اليوم', history: 'السجل', calendar: 'التقويم', reports: 'التقارير' },
 
   today: {
     companyPeriod: 'فترة دوام الشركة:',
@@ -383,7 +388,7 @@ const ar: AppTranslations = {
     offline: 'وضع بدون إنترنت',
     offlineInfo: '• عند وجود الإنترنت: وقت من خادم NTP (UTC+3)\n• بدونه: ساعة الجهاز مع علامة ⚠\n• البيانات محلية — لا يُرسَل شيء خارجياً\n• الصور مخفية تلقائياً عن الألبوم',
     about: 'عن التطبيق',
-    aboutInfo: 'نظام حضور شخصي يعمل بدون إنترنت\nالسجلات مقفلة بعد الحفظ\nالشهر يبدأ 26 وينتهي 25\nالإصدار 2.2.0',
+    aboutInfo: 'نظام حضور شخصي يعمل بدون إنترنت\nالسجلات مقفلة بعد الحفظ\nالشهر يبدأ 26 وينتهي 25\nالإصدار 3.2.0',
     checkUpdate: 'التحقق من التحديثات',
     checkingUpdate: 'جاري التحقق…',
     downloadingUpdate: 'جاري التنزيل…',
@@ -414,12 +419,17 @@ const ar: AppTranslations = {
     syncingTime: 'مزامنة مع خادم الوقت (Asia/Riyadh)...',
     confirmTitle: 'تأكيد الحضور',
     noteLabel: 'ملاحظة (اختياري)',
-    notePlaceholder: 'مثال: مهمة خارجية، اجتماع...',
+    notePlaceholder: 'أضف ملاحظة على هذا السجل...',
     lockedTime: 'وقت التسجيل — مقفل لا يمكن تعديله',
     saving: 'جاري الحفظ...',
     cameraError: 'فشل فتح الكاميرا',
     saveError: 'فشل الحفظ',
     success: '✓',
+    lowQualityTitle: '⚠️ جودة الصورة منخفضة',
+    lowQualityMsg: 'الصورة تبدو مظلمة أو ضبابية جداً. يُنصح بإعادة التصوير في مكان أكثر إضاءة.',
+    useAnyway: 'استخدام الصورة',
+    unsyncedWarning: 'لا يوجد إنترنت — يُعلَّم السجل كـ «غير مزامن»',
+    noteOptional: 'ملاحظة (اختياري)',
   },
 
   recordDetail: {
@@ -522,7 +532,7 @@ const en: AppTranslations = {
 
   recordTypes: { entry1: 'Entry', exit1: 'Exit', entry2: 'Entry 2', exit2: 'Exit 2' },
 
-  tabs: { today: 'Today', history: 'History', calendar: 'Calendar', reports: 'Reports' },
+  tabs: { employee: 'Employee', today: 'Today', history: 'History', calendar: 'Calendar', reports: 'Reports' },
 
   today: {
     companyPeriod: 'Work Period:',
@@ -633,7 +643,7 @@ const en: AppTranslations = {
     offline: 'Offline Mode',
     offlineInfo: '• With internet: NTP server time (UTC+3)\n• Without: Device time with ⚠ marker\n• All data is local — nothing sent externally\n• Photos are hidden from gallery automatically',
     about: 'About',
-    aboutInfo: 'Personal attendance system — works offline\nRecords are locked after saving\nWork month: 26th to 25th\nVersion 2.2.0',
+    aboutInfo: 'Personal attendance system — works offline\nRecords are locked after saving\nWork month: 26th to 25th\nVersion 3.2.0',
     checkUpdate: 'Check for Updates',
     checkingUpdate: 'Checking…',
     downloadingUpdate: 'Downloading…',
@@ -664,12 +674,17 @@ const en: AppTranslations = {
     syncingTime: 'Syncing with time server (Asia/Riyadh)...',
     confirmTitle: 'Confirm Attendance',
     noteLabel: 'Note (optional)',
-    notePlaceholder: 'e.g. Field mission, meeting...',
+    notePlaceholder: 'Add a note for this record...',
     lockedTime: 'Recorded time — locked, cannot be edited',
     saving: 'Saving...',
     cameraError: 'Failed to open camera',
     saveError: 'Failed to save',
     success: '✓',
+    lowQualityTitle: '⚠️ Low Image Quality',
+    lowQualityMsg: 'The photo appears too dark or blurry. Consider retaking in a better-lit area.',
+    useAnyway: 'Use Anyway',
+    unsyncedWarning: 'No internet — record marked as "unsynced"',
+    noteOptional: 'Note (optional)',
   },
 
   recordDetail: {

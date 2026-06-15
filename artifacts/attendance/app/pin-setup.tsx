@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { setPIN, disablePIN } from '@/utils/pinAuth';
+import { setPIN } from '@/utils/pinAuth';
 import { useSettings } from '@/context/SettingsContext';
 import { moderateScale, clampFont, buildFontSize, spacing } from '@/utils/responsive';
 
@@ -38,8 +38,15 @@ export default function PinSetupScreen() {
       setMode('confirm');
     } else {
       if (pin === first) {
-        await setPIN(pin);
-        setMode('done');
+        try {
+          await setPIN(pin);
+          setMode('done');
+        } catch (err) {
+          setError('فشل حفظ الرمز — حاول مجدداً');
+          setDigits([]);
+          setFirst('');
+          setMode('enter');
+        }
       } else {
         setError('الرمزان غير متطابقان — حاول مجدداً');
         setDigits([]);
@@ -119,13 +126,17 @@ export default function PinSetupScreen() {
                     backgroundColor: k === '⌫' ? colors.muted : k === '✓' ? 'transparent' : colors.card,
                     borderColor: colors.border,
                   }]}
-                  onPress={() => k !== '✓' && handleDigit(k)}
+                  onPress={() => handleDigit(k)}
                   activeOpacity={0.7}
                 >
                   {k === '⌫' ? (
                     <Ionicons name="backspace-outline" size={moderateScale(22)} color={colors.foreground} />
                   ) : k === '✓' ? (
-                    <View />
+                    digits.length === 4 ? (
+                      <Ionicons name="checkmark" size={moderateScale(22)} color={colors.success} />
+                    ) : (
+                      <View />
+                    )
                   ) : (
                     <Text style={[styles.kText, { color: colors.foreground }]}>{k}</Text>
                   )}

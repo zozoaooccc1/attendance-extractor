@@ -976,5 +976,3 @@ function createStyles(mul: number = 1) {
     updateBtnText: { fontSize: fs.base },
   });
 }
-
-const styles = createStyles();

@@ -39,6 +39,7 @@ export function checkLateEntry(
     grace = entryType === 'entry1' ? REGULAR_DOUBLE.entry1Grace : REGULAR_DOUBLE.entry2Grace;
   }
   const [h, m] = confirmedTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return { isLate: false, minutesLate: 0, graceLimitStr: '' };
   const recordedMins = h * 60 + m;
   const graceMins = grace.hour * 60 + grace.minute;
   const isLate = recordedMins > graceMins;

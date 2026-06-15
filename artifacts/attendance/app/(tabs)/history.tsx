@@ -140,12 +140,16 @@ export default function HistoryScreen() {
 
   const styles = useMemo(() => createStyles(fontMultiplier), [fontMultiplier]);
 
-  useFocusEffect(useCallback(() => { refreshDates(); }, [refreshDates]));
-
-  const thisMonth = useMemo(() => {
+  const [thisMonth, setThisMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  }, []);
+  });
+
+  useFocusEffect(useCallback(() => {
+    refreshDates();
+    const now = new Date();
+    setThisMonth(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
+  }, [refreshDates]));
 
   const filtered = useMemo(() => {
     let dates = [...allDates];

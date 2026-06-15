@@ -19,12 +19,37 @@ const ALL: Achievement[] = [
   { id: 'synced50', label: '50 سجلاً مزامناً',  desc: '50 سجل مع مزامنة الإنترنت',     icon: '🌐' },
 ];
 
+/**
+ * الحصول على الإنجازات المحققة.
+ * يدعم التنسيق القديم (string[]) والتنسيق الجديد (Record<string, number>).
+ */
 export async function getEarned(): Promise<Achievement[]> {
   try {
     const v = await AsyncStorage.getItem(KEY);
     if (!v) return [];
-    const ids: string[] = JSON.parse(v);
-    return ALL.filter(a => ids.includes(a.id));
+    const parsed = JSON.parse(v);
+
+    // تنسيق قديم: مصفوفة أسماء فقط
+    if (Array.isArray(parsed)) {
+      const ids: string[] = parsed;
+      return ALL.filter(a => ids.includes(a.id)).map(a => ({
+        ...a,
+        earnedAt: undefined,
+      }));
+    }
+
+    // تنسيق جديد: كائن { id → timestamp }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const earnedMap: Record<string, number> = parsed;
+      return ALL
+        .filter(a => a.id in earnedMap)
+        .map(a => ({
+          ...a,
+          earnedAt: earnedMap[a.id],
+        }));
+    }
+
+    return [];
   } catch { return []; }
 }
 
@@ -32,16 +57,35 @@ export async function checkAndAward(
   streak: number,
   allRecords: AttendanceRecord[],
   completeDays: number,
+  noLateDays?: number,
 ): Promise<Achievement[]> {
   const newlyEarned: Achievement[] = [];
   try {
     const v = await AsyncStorage.getItem(KEY);
-    const earned: Record<string, number> = v ? JSON.parse(v) : {};
+    let earned: Record<string, number>;
+
+    // دعم التنسيق القديم عند الترقية
+    if (v) {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) {
+        earned = {};
+        for (const id of parsed as string[]) {
+          earned[id] = 0; // لا نعرف تاريخ الإنجاز القديم
+        }
+      } else {
+        earned = parsed as Record<string, number>;
+      }
+    } else {
+      earned = {};
+    }
+
     const syncedCount = allRecords.filter(r => r.isSynced).length;
+    const noLate = noLateDays ?? 0;
 
     const checks: [string, boolean][] = [
       ['streak7',  streak >= 7],
       ['streak30', streak >= 30],
+      ['noLate7',  noLate >= 7],
       ['full10',   completeDays >= 10],
       ['synced50', syncedCount >= 50],
     ];

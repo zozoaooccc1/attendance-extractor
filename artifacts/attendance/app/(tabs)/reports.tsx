@@ -162,7 +162,11 @@ function buildCsv(records: AttendanceRecord[], period: CompanyPeriod, employeeNa
   const sorted = [...records].sort((a,b) => a.date.localeCompare(b.date));
   for (const r of sorted) {
     const [y,m,d] = r.date.split('-').map(Number);
-    const { isLate } = checkLateEntry(r.type as any, r.confirmedTime, new Date(y,m-1,d), r.shiftType);
+    const entryTypes: ('entry1' | 'entry2')[] = ['entry1', 'entry2'];
+    const isLateEntry = entryTypes.includes(r.type as 'entry1' | 'entry2');
+    const { isLate } = isLateEntry
+      ? checkLateEntry(r.type as 'entry1' | 'entry2', r.confirmedTime, new Date(y,m-1,d), r.shiftType)
+      : { isLate: false };
     // الملاحظة تُضاف في CSV فقط إذا كان السجل متأخراً
     const noteCol = isLate && r.note?.trim() ? `"${r.note.trim().replace(/"/g, '""')}"` : '';
     lines.push([r.date, RECORD_LABELS[r.type], r.confirmedTime, r.isSynced ? 'نعم' : 'لا', isLate ? 'نعم' : 'لا', noteCol].join(','));
@@ -274,7 +278,8 @@ export default function ReportsScreen() {
       const csv = buildCsv(records, period, employeeName, department);
       const namePart = employeeName ? `_${employeeName.replace(/\s/g, '_')}` : '';
       const filename = `بصمتي${namePart}_${period.label.replace(/\s/g, '_')}.csv`;
-      const uri = (FileSystem.documentDirectory ?? '') + filename;
+      if (!FileSystem.documentDirectory) { Alert.alert('خطأ', 'لا يمكن الوصول للتخزين'); setLoading(false); return; }
+      const uri = FileSystem.documentDirectory + filename;
       await FileSystem.writeAsStringAsync(uri, '\uFEFF' + csv, { encoding: FileSystem.EncodingType.UTF8 });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: `سجلات الحضور — ${period.label}`, UTI: 'public.comma-separated-values-text' });

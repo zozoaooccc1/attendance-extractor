@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, Platform,
+  TouchableOpacity, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,6 +95,13 @@ export default function EmployeeScreen() {
   }, [todayRecords, getRecordForMonth]);
 
   const handleShiftChange = (shift: ShiftType) => {
+    if (todayRecords.length > 0) {
+      Alert.alert(
+        t.error,
+        'لا يمكن تغيير نوع الدوام بعد تسجيل الحضور اليوم.'
+      );
+      return;
+    }
     if (Platform.OS !== 'web') Haptics.selectionAsync();
     setShiftType(shift);
   };

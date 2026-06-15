@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Language, AppTranslations, translations, RTL_LANGUAGES } from '@/i18n/index';
+import React, { createContext, useContext } from 'react';
+import { Language, AppTranslations, RTL_LANGUAGES } from '@/i18n/index';
+import { useSettings } from '@/context/SettingsContext';
 
 interface LanguageContextType {
   language: Language;
@@ -10,27 +10,21 @@ interface LanguageContextType {
 }
 
 const LanguageContext = createContext<LanguageContextType | null>(null);
-const KEY = 'attendance_language_v1';
 
+/**
+ * LanguageProvider أصبح الآن وسيطًا يفوّض كل الحالة إلى SettingsContext
+ * لإزالة التكرار ومنع حالة السباق بين السياقين.
+ */
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLang] = useState<Language>('ar');
+  const { language, setLanguage, t, isRTL, settingsLoaded } = useSettings();
 
-  useEffect(() => {
-    AsyncStorage.getItem(KEY).then(v => {
-      if (v === 'ar' || v === 'en') setLang(v);
-    });
-  }, []);
-
-  const setLanguage = useCallback((l: Language) => {
-    setLang(l);
-    AsyncStorage.setItem(KEY, l);
-  }, []);
-
-  const t = translations[language];
-  const isRTL = RTL_LANGUAGES.includes(language);
+  // انتظر حتى تُحمّل الإعدادات لمنع الوميض
+  const value: LanguageContextType = settingsLoaded
+    ? { language, setLanguage, t, isRTL }
+    : { language: 'ar', setLanguage, t: t, isRTL: true };
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, isRTL }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );
